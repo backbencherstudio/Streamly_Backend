@@ -1,5 +1,41 @@
-node_modules
-# Keep environment variables out of version control
+# Node modules (packages)
+node_modules/
+
+# Environment variables (never commit secrets)
 .env
 
-/generated/prisma
+# Prisma generated files (client and other cache)
+prisma/generated/
+.prisma/
+
+# OS system files
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Optional: editor/IDE settings
+.vscode/
+.idea/
+
+# Optional: OS junk
+*.swp
+
+# Optional: coverage reports
+coverage/
+
+# Build outputs (if using TypeScript or Babel)
+dist/
+build/
+
+# Optional: database files if using SQLite
+*.sqlite
+*.db
+
+# Optional: dotenv files for different envs
+.env.*
