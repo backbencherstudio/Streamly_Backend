@@ -20,6 +20,7 @@ const generateToken = (id, email) => {
     });
   };
 
+  //password hasing
 const hashPassword = async (password) => {
     const salt = await bcrypt.genSalt(8);
     return await bcrypt.hash(password, salt);
