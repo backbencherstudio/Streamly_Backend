@@ -1,8 +1,9 @@
 import express from 'express';
 import {
-  registerUserStep1,
-  verifyOTP,
-  registerUserStep3,
+  // registerUserStep1,
+  // verifyOTP,
+  // registerUserStep3,
+  registerUser,
   loginUser,
   forgotPasswordOTPsend,
   resetPassword,
@@ -31,9 +32,9 @@ router.post('/upload', upload.single('file'), (req, res) => {
   res.status(200).send({ message: 'File uploaded successfully', file: req.file });
 });
 //Register a user
-router.post('/register-step1', registerUserStep1);
-router.post('/verify-otp', verifyOTP);
-router.post('/register-step3', registerUserStep3);
+router.post('/registerUser', registerUser);
+// router.post('/verify-otp', verifyOTP);
+// router.post('/register-step3', registerUserStep3);
 //log iin a user
 router.post('/login', loginUser);
 //forget pass
