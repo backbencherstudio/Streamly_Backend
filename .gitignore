@@ -4,9 +4,6 @@ node_modules/
 #uploads directory
 # This is where uploaded files are stored, and it should not be committed to the repository.
 uploads/
-/uploads
-D:\BBS WORKING PROJECTS\Streamly\uploads
-
 # Environment variables (never commit secrets)
 .env
 
