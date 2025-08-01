@@ -14,8 +14,361 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Status {
+  active
+  inactive
+  expired
+}
+
+enum Role {
+  normal
+  premium
+  admin
+}
 model User {
-  id    Int     @id @default(autoincrement())
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
   email String  @unique
   name  String?
+  password  String?
+  customer_id String?
+  country String?
+  gender String?
+  status  Status @default(active)
+  role    Role  @default(normal)
+  date_of_birth DateTime? @db.Date
+  city  String?
+  phone_number String?
+  state  String?
+  postal_code String?
+  bio    String?
+  is_two_factor_enabled Int?    @default(0)
+  two_factor_secret     String? // secret key for two factor authentication
+    //notification
+  receiver_notifications    Notification[] @relation("receiver")
+  sender_notifications      Notification[] @relation("sender")
+  Subscription Subscription[]
+
+  UserPaymentMethod UserPaymentMethod[]
+  orders                   Order[]
+  PaymentTransaction PaymentTransaction[]
+
+  UserSetting UserSetting[]
+
+  EmailHistoryRecipient EmailHistoryRecipient[]
+}
+
+model UserPaymentMethod {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  user_id String?
+  user    User?   @relation(fields: [user_id], references: [id])
+
+  payment_method_id String?
+  checkout_id       String?
+
+  @@map("user_payment_methods")
+}
+model Setting {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  category    String?
+  label       String?
+  description String?
+
+  key           String? @unique
+  default_value String?
+
+  user_settings UserSetting[]
+
+  @@map("settings")
+}
+
+model UserSetting {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  user_id String?
+  user    User?   @relation(fields: [user_id], references: [id])
+
+  setting_id String?
+  setting    Setting? @relation(fields: [setting_id], references: [id])
+
+  value String?
+
+  @@map("user_settings")
+}
+
+model PaymentTransaction {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+  status     String?   @default("pending")
+
+  user_id String?
+  user    User?   @relation(fields: [user_id], references: [id])
+
+  subscription_id String?
+  subscription    Subscription? @relation(fields: [subscription_id], references: [id])
+
+  type         String? @default("order")
+  withdraw_via String? @default("wallet")
+
+  provider String? // stripe, paypal, etc.
+
+  reference_number String?
+  raw_status       String?
+  amount           Decimal?
+  currency         String?
+  paid_amount      Decimal?
+  paid_currency    String?
+
+  @@map("payment_transactions")
+}
+
+
+model NotificationEvent {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  status Int?    @default(1) @db.SmallInt
+  type   String?
+  text   String?
+
+  notifications Notification[]
+
+  @@map("notification_events")
+}
+
+model Notification {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  status Int? @default(1) @db.SmallInt
+
+  sender_id String?
+  sender    User?   @relation("sender", fields: [sender_id], references: [id])
+
+  receiver_id String?
+  receiver    User?   @relation("receiver", fields: [receiver_id], references: [id])
+
+  notification_event_id String?
+  notification_event    NotificationEvent? @relation(fields: [notification_event_id], references: [id])
+
+  entity_id String?
+  read_at   DateTime?
+
+  @@map("notifications")
+}
+
+
+
+
+
+enum Plan {
+  No_plan    //need to add a separete model for the plans
+  Most_popular
+  Family
+  Basic
+}
+enum Payment_method {
+  No_pay
+  vredit_card
+  stripe
+  paypal
+}
+model Subscription{
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+
+  user_id  String?
+  user    User?   @relation(fields: [user_id], references: [id])
+
+
+  renewal_date DateTime
+  plan       Plan @default(No_plan)
+  payment_method Payment_method  @default(No_pay)
+  transaction_id String
+  status Status @default(active)
+  
+
+  PaymentTransaction PaymentTransaction[]
+
+  Order Order[]
+}
+
+
+model Live_streaming{
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+
+  all_live  String[]
+  live_sports String[]
+}
+
+model Favourite{
+  id         String     @id @default(cuid())
+  created_at DateTime   @default(now())
+}
+model Admin_settings{
+     id         String     @id @default(cuid())
+  created_at DateTime   @default(now())
+}
+
+
+// for movie
+enum Content_status {
+ published
+ live
+ draft
+}
+
+model Content {
+  id         String     @id @default(cuid())
+  created_at DateTime   @default(now())
+  updated_at DateTime   @default(now())
+  description String
+
+  title      String
+  genre      String
+  categories Category[] 
+  content_type       String
+  duration   String
+  content_status     Content_status @default(draft)
+  thumbnail  String
+  video      String
+  
+
+}
+
+model Category {
+  id         String     @id @default(cuid())
+  created_at DateTime   @default(now())
+  updated_at DateTime   @default(now())
+  deleted_at DateTime?
+  status     Int?       @default(1) @db.SmallInt
+
+  name       String?
+  slug       String?    @unique
+
+  contents   Content[]  
+
+  @@map("categories")
+}
+
+model Feature {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+  status     Int?      @default(1) @db.SmallInt
+
+  name String?
+
+
+  @@map("features")
+}
+
+
+model SecuritySettings {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+  status     Int?      @default(1) @db.SmallInt
+
+  data_export_backup    Int
+  session_timeout       Int
+  failed_login_attempts Int
+  password_expiry       Int
+
+  @@map("security_settings")
+}
+
+
+// this table stores Email history
+model EmailHistory {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+  status     Int?      @default(1) @db.SmallInt
+  sort_order Int?      @default(0)
+
+  type    String? // Password Reset, Email Verification, etc.
+  subject String?
+  body    String? @db.Text
+
+  email_history_recipients EmailHistoryRecipient[]
+
+  @@map("email_histories")
+}
+
+// this table stores Email history recipient
+model EmailHistoryRecipient {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  email_history_id String
+  email_history    EmailHistory? @relation(fields: [email_history_id], references: [id], onDelete: Cascade)
+
+  recipient_id String
+  recipient    User?  @relation(fields: [recipient_id], references: [id], onDelete: Cascade)
+
+  @@map("email_history_recipients")
+}
+
+enum clintStatus {
+ active
+ inactive
+}
+enum paymentStatus {
+ paid
+ pending
+ due
+}
+enum OrderStatus {
+  progress
+  completed
+  pending
+  canceled
+}
+model Order {
+  id               String    @id
+  created_at       DateTime  @default(now())       
+
+  order_status     OrderStatus @default(progress)   
+
+  subscription_id  String?  
+  subscription     Subscription? @relation(fields: [subscription_id], references: [id]) 
+
+  user_id          String?  
+  user             User?    @relation(fields: [user_id], references: [id]) 
+
+  status           clintStatus  @default(active) 
+  ammount          Float?
+  user_name        String?   
+  user_email       String?   
+  pakage_name      String?   
+  payment_status   paymentStatus @default(pending)
+ 
+
+  @@map("orders") 
+
 }
