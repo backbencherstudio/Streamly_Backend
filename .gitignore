@@ -1,6 +1,9 @@
 # Node modules (packages)
 node_modules/
 
+#uploads directory
+# This is where uploaded files are stored, and it should not be committed to the repository.
+uploads/
 # Environment variables (never commit secrets)
 .env
 
