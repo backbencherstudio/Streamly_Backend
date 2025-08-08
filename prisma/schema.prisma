@@ -13,7 +13,16 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+model Temp{
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  email      String   @unique
+  otp        String   @unique
+  expires_at DateTime
+  is_verified Int?    @default(0) // 0 for not verified, 1 for verified
 
+  @@map("temp")
+}
 enum Status {
   active
   inactive
@@ -56,6 +65,8 @@ model User {
   UserSetting UserSetting[]
 
   EmailHistoryRecipient EmailHistoryRecipient[]
+
+  @@map("users ")
 }
 
 model UserPaymentMethod {
