@@ -6,23 +6,25 @@
 
 generator client {
   provider = "prisma-client-js"
- // output   = "../generated/prisma"
+  // output   = "../generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
-model Temp{
-  id         String   @id @default(cuid())
-  created_at DateTime @default(now())
-  email      String   @unique
-  otp        String   @unique
-  expires_at DateTime
-  is_verified Int?    @default(0) // 0 for not verified, 1 for verified
+
+model Temp {
+  id          String   @id @default(cuid())
+  created_at  DateTime @default(now())
+  email       String   @unique
+  otp         String   @unique
+  expires_at  DateTime
+  is_verified Int?     @default(0) // 0 for not verified, 1 for verified
 
   @@map("temp")
 }
+
 enum Status {
   active
   inactive
@@ -34,32 +36,36 @@ enum Role {
   premium
   admin
 }
-model User {
-  id         String   @id @default(cuid())
-  created_at DateTime @default(now())
-  email String  @unique
-  name  String?
-  password  String?
-  customer_id String?
-  country String?
-  gender String?
-  status  Status @default(active)
-  role    Role  @default(normal)
-  date_of_birth DateTime? @db.Date
-  city  String?
-  phone_number String?
-  state  String?
-  postal_code String?
-  bio    String?
-  is_two_factor_enabled Int?    @default(0)
-  two_factor_secret     String? // secret key for two factor authentication
-    //notification
-  receiver_notifications    Notification[] @relation("receiver")
-  sender_notifications      Notification[] @relation("sender")
-  Subscription Subscription[]
 
-  UserPaymentMethod UserPaymentMethod[]
-  orders                   Order[]
+model User {
+  id                     String         @id @default(cuid())
+  created_at             DateTime       @default(now())
+  updated_at             DateTime       @default(now())
+  deleted_at             DateTime?
+  email                  String         @unique
+  name                   String?
+  password               String?
+  customer_id            String?
+  country                String?
+  gender                 String?
+  status                 Status         @default(active)
+  role                   Role           @default(normal)
+  avatar                 String?        // public URL to avatar image
+  date_of_birth          DateTime?      @db.Date
+  city                   String?
+  phone_number           String?
+  state                  String?
+  postal_code            String?
+  bio                    String?
+  is_two_factor_enabled  Int?           @default(0)
+  two_factor_secret      String? // secret key for two factor authentication
+  //notification
+  receiver_notifications Notification[] @relation("receiver")
+  sender_notifications   Notification[] @relation("sender")
+  Subscription           Subscription[]
+
+  UserPaymentMethod  UserPaymentMethod[]
+  orders             Order[]
   PaymentTransaction PaymentTransaction[]
 
   UserSetting UserSetting[]
@@ -83,6 +89,7 @@ model UserPaymentMethod {
 
   @@map("user_payment_methods")
 }
+
 model Setting {
   id         String    @id @default(cuid())
   created_at DateTime  @default(now())
@@ -146,7 +153,6 @@ model PaymentTransaction {
   @@map("payment_transactions")
 }
 
-
 model NotificationEvent {
   id         String    @id @default(cuid())
   created_at DateTime  @default(now())
@@ -185,131 +191,162 @@ model Notification {
   @@map("notifications")
 }
 
-
-
-
-
 enum Plan {
-  No_plan    //need to add a separete model for the plans
+  No_plan //need to add a separete model for the plans
   Most_popular
   Family
   Basic
 }
+
 enum Payment_method {
   No_pay
   vredit_card
   stripe
   paypal
 }
-model Subscription{
+
+model Subscription {
   id         String   @id @default(cuid())
   created_at DateTime @default(now())
   updated_at DateTime @default(now())
 
-  user_id  String?
+  user_id String?
   user    User?   @relation(fields: [user_id], references: [id])
 
-
-  renewal_date DateTime
-  plan       Plan @default(No_plan)
-  payment_method Payment_method  @default(No_pay)
+  renewal_date   DateTime
+  plan           Plan           @default(No_plan)
+  payment_method Payment_method @default(No_pay)
   transaction_id String
-  status Status @default(active)
-  
+  status         Status         @default(active)
 
   PaymentTransaction PaymentTransaction[]
 
   Order Order[]
 }
 
-
-model Live_streaming{
+model Live_streaming {
   id         String   @id @default(cuid())
   created_at DateTime @default(now())
 
-  all_live  String[]
+  all_live    String[]
   live_sports String[]
 }
 
-model Favourite{
-  id         String     @id @default(cuid())
-  created_at DateTime   @default(now())
-}
-model Admin_settings{
-     id         String     @id @default(cuid())
-  created_at DateTime   @default(now())
+model Favourite {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
 }
 
+model Admin_settings {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+}
 
 // for movie
+
+
+enum Genra {
+  action
+  adventure
+  animation
+  biography
+  comedy
+  crime
+  documentary
+  drama
+  family
+  fantasy
+  history
+  horror
+  music
+  musical
+  mystery
+  romance
+  sci_fi
+  sport
+  thriller
+  war
+  western
+}
+
 enum Content_status {
- published
- live
- draft
+  published
+  draft
+  uploading_local
+  uploading_s3
+  processing
+  failed
 }
 
 model Content {
-  id         String     @id @default(cuid())
-  created_at DateTime   @default(now())
-  updated_at DateTime   @default(now())
-  description String
+  id               String          @id @default(cuid())
+  created_at       DateTime?       @default(now())
+  updated_at       DateTime?       @updatedAt
+  description      String?
 
-  title      String
-  genre      String
-  categories Category[] 
-  content_type       String
-  duration   String
-  content_status     Content_status @default(draft)
-  thumbnail  String
-  video      String
-  
+  title            String?
+  genre            Genra?
+  category_id      String?
+  category         Category?       @relation(fields: [category_id], references: [id])
+  content_type     String?
+  duration         String?         // or Int
+  content_status   Content_status   @default(draft)
 
+  storage_provider String?         // "local" | "s3"
+  s3_bucket        String?
+  s3_key           String?
+  s3_thumb_key     String?
+  original_name    String?
+  file_size_bytes  BigInt?
+  etag             String?
+  checksum_sha256  String?
+
+  thumbnail        String?         // optional public URL
+  video            String?         // optional public URL
 }
 
+
 model Category {
-  id         String     @id @default(cuid())
-  created_at DateTime   @default(now())
-  updated_at DateTime   @default(now())
+  id         String    @id @default(cuid())
+  created_at DateTime?  @default(now())
+  updated_at DateTime?  @default(now())
   deleted_at DateTime?
-  status     Int?       @default(1) @db.SmallInt
+  status     Int?      @default(1) @db.SmallInt
 
-  name       String?
-  slug       String?    @unique
+  name String?
+  slug String? @unique
 
-  contents   Content[]  
+  contents Content[]
 
   @@map("categories")
 }
 
 model Feature {
   id         String    @id @default(cuid())
-  created_at DateTime  @default(now())
-  updated_at DateTime  @default(now())
+  created_at DateTime?  @default(now())
+  updated_at DateTime?  @default(now())
   deleted_at DateTime?
   status     Int?      @default(1) @db.SmallInt
 
   name String?
 
-
   @@map("features")
 }
 
-
 model SecuritySettings {
   id         String    @id @default(cuid())
-  created_at DateTime  @default(now())
-  updated_at DateTime  @default(now())
+  created_at DateTime?  @default(now())
+  updated_at DateTime?  @default(now())
   deleted_at DateTime?
   status     Int?      @default(1) @db.SmallInt
 
-  data_export_backup    Int
-  session_timeout       Int
-  failed_login_attempts Int
-  password_expiry       Int
+  data_export_backup    Int?
+  session_timeout       Int?
+  failed_login_attempts Int?
+  password_expiry       Int?
 
   @@map("security_settings")
 }
-
 
 // this table stores Email history
 model EmailHistory {
@@ -346,40 +383,41 @@ model EmailHistoryRecipient {
 }
 
 enum clintStatus {
- active
- inactive
+  active
+  inactive
 }
+
 enum paymentStatus {
- paid
- pending
- due
+  paid
+  pending
+  due
 }
+
 enum OrderStatus {
   progress
   completed
   pending
   canceled
 }
+
 model Order {
-  id               String    @id
-  created_at       DateTime  @default(now())       
+  id         String   @id
+  created_at DateTime @default(now())
 
-  order_status     OrderStatus @default(progress)   
+  order_status OrderStatus @default(progress)
 
-  subscription_id  String?  
-  subscription     Subscription? @relation(fields: [subscription_id], references: [id]) 
+  subscription_id String?
+  subscription    Subscription? @relation(fields: [subscription_id], references: [id])
 
-  user_id          String?  
-  user             User?    @relation(fields: [user_id], references: [id]) 
+  user_id String?
+  user    User?   @relation(fields: [user_id], references: [id])
 
-  status           clintStatus  @default(active) 
-  ammount          Float?
-  user_name        String?   
-  user_email       String?   
-  pakage_name      String?   
-  payment_status   paymentStatus @default(pending)
- 
+  status         clintStatus   @default(active)
+  ammount        Float?
+  user_name      String?
+  user_email     String?
+  pakage_name    String?
+  payment_status paymentStatus @default(pending)
 
-  @@map("orders") 
-
+  @@map("orders")
 }

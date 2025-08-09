@@ -6,6 +6,8 @@ import path from "path";
 import userRoutes from "./modules/user/user.route.js";
 import nodeCron from "node-cron";
 import { PrismaClient } from "@prisma/client";
+import uploadsRoutes from "./modules/admin/video_routes/uploads.route.js";
+import contentsRoutes from "./modules/admin/video_routes/contenets.route.js";
 
 //Import Swagger spec and UI
 import { swaggerSpec } from "./swagger/index.js";
@@ -13,7 +15,11 @@ import swaggerUi from "swagger-ui-express";
 
 const app = express();
 const prisma = new PrismaClient();
+app.set('json replacer', (key, value) =>
+  typeof value === 'bigint' ? value.toString() : value
+);
 
+BigInt.prototype.toJSON = function () { return this.toString(); };
 //Swagger UI route
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
@@ -93,6 +99,8 @@ app.use(morgan("dev"));
 
 //Use routes
 app.use('/api/users', userRoutes);
+app.use('/api/uploads', uploadsRoutes);
+app.use('/api/contents', contentsRoutes);
 
 //Resolve __dirname for ESM
 const __filename = fileURLToPath(import.meta.url);
