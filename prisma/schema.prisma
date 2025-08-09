@@ -31,6 +31,11 @@ enum Status {
   expired
 }
 
+enum StatusUser {
+  Active 
+  Banned
+}
+
 enum Role {
   normal
   premium
@@ -192,10 +197,10 @@ model Notification {
 }
 
 enum Plan {
-  No_plan //need to add a separete model for the plans
-  Most_popular
-  Family
-  Basic
+  most_popular
+  basic
+  family
+  No_plan
 }
 
 enum Payment_method {
@@ -222,6 +227,20 @@ model Subscription {
   PaymentTransaction PaymentTransaction[]
 
   Order Order[]
+
+  Services Services[]
+}
+
+model Services{
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  name       String
+  description String?
+  price      Float
+  features   String[]
+  plan       Plan 
+  @@map("services")
+  Subscription Subscription[]
 }
 
 model Live_streaming {
