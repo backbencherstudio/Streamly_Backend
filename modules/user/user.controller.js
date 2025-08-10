@@ -614,7 +614,7 @@ export const googleLogin = async (req, res) => {
     const name = payload.name;
     const avatar = payload.picture;
     
-    // Find or create user
+    // Check if the user already exists in the database
     let user = await prisma.user.findUnique({ where: { email } });
     
     if (!user) {
@@ -625,7 +625,6 @@ export const googleLogin = async (req, res) => {
           name,
           avatar,
           password: "", // No password needed for Google login
-          type: "USER", // Adjust as necessary
         },
       });
     } else {
@@ -640,7 +639,7 @@ export const googleLogin = async (req, res) => {
     const token = jwt.sign(
       { userId: user.id, email: user.email, role: user.role, type: user.type, googleId: payload.sub },
       process.env.JWT_SECRET,
-      { expiresIn: "100d" }
+      { expiresIn: "7d" }
     );
 
     // Send back the success response with user data and token
@@ -656,7 +655,7 @@ export const googleLogin = async (req, res) => {
       token,
     });
   } catch (error) {
-    console.error('Error verifying token:', error);
+    // Return an error response if something goes wrong
     return res.status(401).json({
       success: false,
       message: "Invalid Google token",
