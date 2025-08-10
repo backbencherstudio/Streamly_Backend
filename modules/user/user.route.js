@@ -34,7 +34,7 @@ router.post("/upload", upload.single("file"), (req, res) => {
 //Register a user
 router.post("/registerUser", registerUser);
 //log in a user
-router.get("/login", loginUser);
+router.post("/login", loginUser);
 
 // Google login
 router.patch("/google-login", googleLogin);
