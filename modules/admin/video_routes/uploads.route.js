@@ -24,7 +24,7 @@ const upload = multer({
   storage,
   limits: { fileSize: 30 * 1024 * 1024 * 1024 }, // 30 GB
 });
-router.post('/video', verifyUser('admin'), upload.single('file'), async (req, res, next) => {
+router.post('/video', upload.single('file'), async (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'file required' });
 
