@@ -47,8 +47,8 @@ router.post('/change-password', verifyUser("USER"), changePassword);
 
 
 //update user img
-router.put('/update-image', upload.single('profilePicture'), verifyUser("USER"), updateImage);
-router.put('/update-user-details', verifyUser("USER"), updateUserDetails);
+router.put('/update-image', upload.single('profilePicture'), verifyUser("normal"), updateImage);
+router.put('/update-user-details', verifyUser("normal"), updateUserDetails);
 
 
 
@@ -57,5 +57,5 @@ router.post('/sende-mail', verifyUser("USER"), sendMailToAdmin)
 
 
 //get me 
-router.get('/get-me', verifyUser("USER"), getMe);
+router.get('/get-me', verifyUser("normal"), getMe);
 export default router;
