@@ -10,14 +10,17 @@ export const getAllUsers = async (req, res) => {
       orderBy: { created_at: 'desc' },
       select: {
         id: true,
-        username: true,
+        name: true,
         email: true,
         status: true,
+        role: true,
+        created_at: true,
+        updated_at: true,
         Subscription: {
           select: {
             status: true,
+            start_date: true,
             end_date: true,
-            name: true,
             plan: true,
           },
         },
@@ -28,13 +31,13 @@ export const getAllUsers = async (req, res) => {
             status: true,
             created_at: true,
           },
-        role: true,
-        created_at: true,
         
       },
   }});
     res.json(users);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch users' });
+    console.log('Error fetching users:', err);
+    
   }
 }
