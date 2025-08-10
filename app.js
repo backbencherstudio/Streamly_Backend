@@ -6,14 +6,22 @@ import path from "path";
 import userRoutes from "./modules/user/user.route.js";
 import nodeCron from "node-cron";
 import { PrismaClient } from "@prisma/client";
-
+import uploadsRoutes from "./modules/admin/video_routes/uploads.route.js";
+import contentsRoutes from "./modules/admin/video_routes/contenets.route.js";
+import pay from "./modules/paymnet/stripe.route.js";
+import create from "./modules/admin/create-category/create_category.route.js"
+import usermanagementRoutes from "./modules/admin/users/users.route.js";
 //Import Swagger spec and UI
 import { swaggerSpec } from "./swagger/index.js";
 import swaggerUi from "swagger-ui-express";
 
 const app = express();
 const prisma = new PrismaClient();
+app.set('json replacer', (key, value) =>
+  typeof value === 'bigint' ? value.toString() : value
+);
 
+BigInt.prototype.toJSON = function () { return this.toString(); };
 //Swagger UI route
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
@@ -35,7 +43,7 @@ app.use(
 
 //Cron job
 let counter = 0;
-nodeCron.schedule('0 0 * * *', async () => { 
+nodeCron.schedule('0 * * * *', async () => { 
   try {
     const now = new Date();
     console.log(`Daily cron job running at: ${now.toISOString()} - Counter: ${counter++}`);
@@ -93,7 +101,11 @@ app.use(morgan("dev"));
 
 //Use routes
 app.use('/api/users', userRoutes);
-
+app.use('/api/uploads', uploadsRoutes);
+app.use('/api/contents', contentsRoutes);
+app.use('/api/payments', pay);
+app.use('/api/admin/services', create);
+app.use('/api/admin/user', usermanagementRoutes);
 //Resolve __dirname for ESM
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
