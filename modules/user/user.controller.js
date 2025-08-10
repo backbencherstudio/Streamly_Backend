@@ -593,41 +593,57 @@ export const googleLogin = async (req, res) => {
   if (!idToken) {
     return res.status(400).json({ message: "ID token is required" });
   }
+
   const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+  
   try {
+    // Verify the ID Token with Google
     const ticket = await client.verifyIdToken({
       idToken,
       audience: process.env.GOOGLE_CLIENT_ID,
     });
+
     const payload = ticket.getPayload();
+    console.log('Google Token Payload:', payload); // Log the payload for debugging
+
+    // Check if email exists in the payload
     const email = payload.email;
+    if (!email) {
+      return res.status(400).json({ success: false, message: "Email is missing from the Google token payload" });
+    }
     const name = payload.name;
     const avatar = payload.picture;
+    
     // Find or create user
     let user = await prisma.user.findUnique({ where: { email } });
+    
     if (!user) {
+      // Create new user if they do not exist
       user = await prisma.user.create({
         data: {
           email,
           name,
           avatar,
-          password: "", // No password for Google users
-          type: "USER",
+          password: "", // No password needed for Google login
+          type: "USER", // Adjust as necessary
         },
       });
     } else {
-      // Optionally update name/avatar if changed
+      // Update user information if necessary
       user = await prisma.user.update({
         where: { email },
         data: { name, avatar },
       });
     }
-    // Issue JWT for session
+
+    // Issue a JWT token for the session
     const token = jwt.sign(
-      { userId: user.id, email: user.email, role: user.role, type: user.type },
+      { userId: user.id, email: user.email, role: user.role, type: user.type, googleId: payload.sub },
       process.env.JWT_SECRET,
       { expiresIn: "100d" }
     );
+
+    // Send back the success response with user data and token
     return res.status(200).json({
       success: true,
       message: "Google login successful",
@@ -640,6 +656,7 @@ export const googleLogin = async (req, res) => {
       token,
     });
   } catch (error) {
+    console.error('Error verifying token:', error);
     return res.status(401).json({
       success: false,
       message: "Invalid Google token",
