@@ -3,6 +3,7 @@ import Stripe from 'stripe';
 import { PrismaClient } from "@prisma/client";
 import cron from 'node-cron';
 
+//need to work here more on this
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const prisma = new PrismaClient();
@@ -22,8 +23,8 @@ export const createPaymentIntent = async (req, res) => {
       return res.status(404).json({ error: 'Service not found' });
     }
 
-    const { email, role, type, userId } = req.user || {};
-    console.log('User Info:', { email, role, type, userId });
+    const { email, role, userId } = req.user || {};
+    console.log('User Info:', { email, role, userId });
 
     const transaction = await prisma.$transaction(async (prismaTx) => {
       try {
@@ -32,12 +33,11 @@ export const createPaymentIntent = async (req, res) => {
           currency,
           payment_method: paymentMethodId,
           metadata: {
-            user_id: userId,
+            user_id: "cmdse9ng90000rexck7fwfwxs",
             user_email: email,
             user_role: role,
-            user_type: type,
-            service_id,
-            plan: service.plan,
+            service_id : 'cme43ky160000rebkdbrnsr71',
+            plan: service.plan || 'basic',
           }
         });
 
@@ -51,9 +51,9 @@ export const createPaymentIntent = async (req, res) => {
           },
         });
 
-        // console.log('Payment Transaction Created:', paymentTransaction);
-        // console.log('Payment Intent Created:', paymentIntent.client_secret);
-        // console.log('Payment Intent Metadata:', paymentIntent.metadata);
+        console.log('Payment Transaction Created:', paymentTransaction);
+        console.log('Payment Intent Created:', paymentIntent.client_secret);
+        console.log('Payment Intent Metadata:', paymentIntent.metadata);
 
         return paymentIntent.client_secret;
       } catch (error) {
@@ -109,17 +109,19 @@ export const handleWebhook = async (req, res) => {
 //nesssary functions for handling payment intent succeeded and failed
 const handlePaymentIntentSucceeded = async (paymentIntent) => {
   const { user_id, service_id, plan } = paymentIntent.metadata;
+  console.log(`Processing payment intent for user ${user_id} with service ${service_id} and plan ${plan}`);
+  
 
-  if (!user_id) {
-    console.error('User ID not found in payment intent metadata.');
-    return;
-  }
+  // if (!user_id) {
+  //   console.error('User ID not found in payment intent metadata.');
+  //   return;
+  // }
 
   const transaction = await prisma.$transaction(async (prismaTx) => {
     try {
       // 1. Update user 
       const userUpdate = await prismaTx.user.update({
-        where: { id: user_id },
+        where: { id: 'cmdse9ng90000rexck7fwfwxs' },
         select: { name: true },
         data: {
           role: "premium",
@@ -131,7 +133,7 @@ const handlePaymentIntentSucceeded = async (paymentIntent) => {
 
 
       const service = await prismaTx.services.findUnique({
-        where: { id: service_id },
+        where: { id: 'cme43ky160000rebkdbrnsr71' },
       });
 
       if (!service) {
@@ -145,25 +147,26 @@ const handlePaymentIntentSucceeded = async (paymentIntent) => {
         data: {
           service_id: service_id,
           user_id: user_id,
-          username: userUpdate.name,
+          username:userUpdate.name,
           plan: plan,
           start_date: startDate,
           end_date: endDate,
           price: service.price,
+          transaction_id: paymentIntent.id,
         },
       });
 
-      console.log(`Subscription created for user ${user_id} with plan ${plan}.`);
+      // console.log(`Subscription created for user ${user_id} with plan ${plan}.`);
 
-      const paymentTransaction = await prismaTx.paymentTransaction.update({
-        where: { id: paymentIntent.id },
-        data: {
-          status: "succeeded",
-          subscription: { connect: { id: subscription.id } },
-        },
-      });
+      // const paymentTransaction = await prismaTx.paymentTransaction.update({
+      //   where: { id: paymentIntent.id },
+      //   data: {
+      //     status: "succeeded",
+      //     subscription: { connect: { id: subscription.id } },
+      //   },
+      // });
 
-      console.log(`Payment transaction updated for user ${user_id}:`, paymentTransaction);
+      // console.log(`Payment transaction updated for user ${user_id}:`, paymentTransaction);
 
       return 'Payment Intent Success';
     } catch (error) {

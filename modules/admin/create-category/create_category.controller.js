@@ -50,3 +50,7 @@ export const  getAllServices = async (req, res) => {
     return res.status(500).json({ message: "Internal Server Error", error: error.message });
   }
 };
+
+
+//create a categr=ory service
+//cosnt 

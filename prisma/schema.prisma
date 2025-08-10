@@ -61,6 +61,7 @@ model User {
   phone_number           String?
   state                  String?
   postal_code            String?
+  is_subscribed          Boolean?      @default(false) // for newsletter subscription
   bio                    String?
   is_two_factor_enabled  Int?           @default(0)
   two_factor_secret      String? // secret key for two factor authentication
@@ -143,17 +144,12 @@ model PaymentTransaction {
   subscription_id String?
   subscription    Subscription? @relation(fields: [subscription_id], references: [id])
 
-  type         String? @default("order")
-  withdraw_via String? @default("wallet")
-
-  provider String? // stripe, paypal, etc.
-
-  reference_number String?
-  raw_status       String?
-  amount           Decimal?
+  provider String? 
+  price           Decimal? 
   currency         String?
   paid_amount      Decimal?
   paid_currency    String?
+  payment_method  String?
 
   @@map("payment_transactions")
 }
@@ -215,6 +211,10 @@ model Subscription {
   created_at DateTime @default(now())
   updated_at DateTime @default(now())
 
+  
+  username       String?
+  email          String?
+  price           Float?
 
   user_id String?
   user    User?   @relation(fields: [user_id], references: [id])

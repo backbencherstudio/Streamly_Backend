@@ -71,7 +71,7 @@ nodeCron.schedule('0 * * * *', async () => {
     await prisma.$transaction([
       prisma.subscription.updateMany({
         where: { id: { in: subscriptionsToUpdate.map((sub) => sub.id) } },
-        data: { status: "Ended" },
+        data: { status: "expired" },
       }),
       prisma.user.updateMany({
         where: { id: { in: userIds } },
