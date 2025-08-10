@@ -1,15 +1,21 @@
+import { OAuth2Client } from "google-auth-library";
+
 import dotenv from "dotenv";
-import validator from 'validator';
+import validator from "validator";
 import bcrypt from "bcryptjs";
-import jwt from 'jsonwebtoken';
-import multer from 'multer';
+import jwt from "jsonwebtoken";
+import multer from "multer";
 import { PrismaClient } from "@prisma/client";
-import { generateOTP, receiveEmails, sendForgotPasswordOTP, sendRegistrationOTPEmail } from "../../utils/mailService.js";
+import {
+  generateOTP,
+  receiveEmails,
+  sendForgotPasswordOTP,
+  sendRegistrationOTPEmail,
+} from "../../utils/mailService.js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import pkg from "jsonwebtoken";
-
 
 const prisma = new PrismaClient();
 const { sign, verify } = pkg;
@@ -28,7 +34,6 @@ const hashPassword = async (password) => {
 // Register a new user
 export const registerUser = async (req, res) => {
   try {
-
     const { email, password, name } = req.body;
     if (!email || !password || !name) {
       return res.status(400).json({ message: "All fields are required" });
@@ -55,27 +60,24 @@ export const registerUser = async (req, res) => {
       success: true,
       message: "User registered successfully",
     });
-
-
   } catch (error) {
     console.error("Error in registerUser:", error);
     return res.status(500).json({ message: "Internal Server Error" });
-
   }
-}
+};
 //login route
 export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-
-    const missingField = ['email', 'password'].find(field => !req.body[field]);
+    const missingField = ["email", "password"].find(
+      (field) => !req.body[field]
+    );
     if (missingField) {
       return res.status(400).json({
         message: `${missingField} is required!`,
       });
     }
-
 
     const user = await prisma.user.findUnique({
       where: {
@@ -83,40 +85,34 @@ export const loginUser = async (req, res) => {
       },
     });
 
-
-
     if (!user) {
       return res.status(404).json({
-        message: 'User not found',
+        message: "User not found",
       });
     }
 
-
-    if (user.type == 'ADMIN') {
+    if (user.type == "ADMIN") {
       return res.status(403).json({
-        message: 'ADMIN YOU MUST LOG IN FROM ADMIN PANEL',
+        message: "ADMIN YOU MUST LOG IN FROM ADMIN PANEL",
       });
     }
-
 
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
-      return res.status(401).json({ message: 'Invalid password' });
+      return res.status(401).json({ message: "Invalid password" });
     }
-
 
     const token = jwt.sign(
       { userId: user.id, email: user.email, role: user.role, type: user.type },
       process.env.JWT_SECRET,
-      { expiresIn: '100d' }
+      { expiresIn: "100d" }
     );
 
-    console.log('Token expires at:', token);
-
+    console.log("Token expires at:", token);
 
     return res.status(200).json({
       success: true,
-      message: 'Login successful',
+      message: "Login successful",
       user: {
         id: user.id,
         name: user.name,
@@ -129,12 +125,11 @@ export const loginUser = async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       success: false,
-      message: 'Something went wrong',
-      error: error instanceof Error ? error.message : 'Unknown error',
+      message: "Something went wrong",
+      error: error instanceof Error ? error.message : "Unknown error",
     });
   }
 };
-
 
 //---------------------forgot password--------------------
 // Forgot password OTP send
@@ -179,7 +174,8 @@ export const forgotPasswordOTPsend = async (req, res) => {
       }
 
       return res.status(400).json({
-        message: "An OTP has already been sent to this email. Please check your inbox or wait for expiration.",
+        message:
+          "An OTP has already been sent to this email. Please check your inbox or wait for expiration.",
         shouldResendOtp: false,
       });
     }
@@ -197,7 +193,8 @@ export const forgotPasswordOTPsend = async (req, res) => {
     sendForgotPasswordOTP(email, otp);
 
     return res.status(200).json({
-      message: "OTP sent successfully to your email. Please verify it to continue.",
+      message:
+        "OTP sent successfully to your email. Please verify it to continue.",
     });
   } catch (error) {
     console.error("Error in sendForgotPasswordOTP:", error);
@@ -243,7 +240,7 @@ export const verifyForgotPasswordOTP = async (req, res) => {
         email: existingTempUser.email,
       },
       process.env.JWT_SECRET,
-      { expiresIn: '10d' }
+      { expiresIn: "10d" }
     );
 
     await prisma.temp.delete({
@@ -265,22 +262,25 @@ export const resetPassword = async (req, res) => {
   try {
     const { newPassword } = req.body;
 
-
     if (!newPassword || newPassword.length < 8) {
-      return res.status(400).json({ message: 'Password must be at least 8 characters long' });
+      return res
+        .status(400)
+        .json({ message: "Password must be at least 8 characters long" });
     }
 
-    const token = req.headers['authorization']?.split(' ')[1];
+    const token = req.headers["authorization"]?.split(" ")[1];
 
     if (!token) {
-      return res.status(400).json({ message: 'Authorization token is required' });
+      return res
+        .status(400)
+        .json({ message: "Authorization token is required" });
     }
 
     let decoded;
     try {
       decoded = jwt.verify(token, process.env.JWT_SECRET);
     } catch (error) {
-      return res.status(401).json({ message: 'Invalid or expired token' });
+      return res.status(401).json({ message: "Invalid or expired token" });
     }
 
     const { email } = decoded;
@@ -290,7 +290,7 @@ export const resetPassword = async (req, res) => {
     });
 
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({ message: "User not found" });
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
@@ -302,7 +302,7 @@ export const resetPassword = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: 'Password reset successfully',
+      message: "Password reset successfully",
       user: {
         id: updatedUser.id,
         email: updatedUser.email,
@@ -310,26 +310,24 @@ export const resetPassword = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Error in resetPassword:', error);
-    return res.status(500).json({ message: 'Internal Server Error' });
+    console.error("Error in resetPassword:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
   }
 };
-
-
 
 //---------------------user profile--------------------
 // Check if user is authenticated
 export const authenticateUser = (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
+  const token = req.headers.authorization?.split(" ")[1];
   if (!token) {
-    return res.status(401).json({ message: 'No token provided' });
+    return res.status(401).json({ message: "No token provided" });
   }
 
   jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
     if (err) {
-      return res.status(403).json({ message: 'Invalid token' });
+      return res.status(403).json({ message: "Invalid token" });
     }
-    req.user = decoded;  // Add user data to req.user
+    req.user = decoded; // Add user data to req.user
     next();
   });
 };
@@ -355,7 +353,11 @@ export const updateImage = async (req, res) => {
     }
 
     if (existingUser.avatar) {
-      const oldImagePath = path.join(__dirname, "../../uploads", existingUser.avatar);
+      const oldImagePath = path.join(
+        __dirname,
+        "../../uploads",
+        existingUser.avatar
+      );
       if (fs.existsSync(oldImagePath)) {
         fs.unlinkSync(oldImagePath);
       }
@@ -376,7 +378,7 @@ export const updateImage = async (req, res) => {
       data: { ...user, imageUrl },
     });
   } catch (error) {
-    console.error('Error during image upload:', error);
+    console.error("Error during image upload:", error);
 
     if (req.file) {
       fs.unlinkSync(path.join(__dirname, "../../uploads", req.file.filename));
@@ -395,7 +397,6 @@ export const updateUserDetails = async (req, res) => {
     const { name, email, address } = req.body;
     const id = req.user?.userId;
 
-
     if (!id) {
       return res.status(400).json({ message: "User not authenticated" });
     }
@@ -407,7 +408,9 @@ export const updateUserDetails = async (req, res) => {
     if (address) dataToUpdate.address = address;
 
     if (Object.keys(dataToUpdate).length === 0) {
-      return res.status(400).json({ message: "No valid fields provided for update" });
+      return res
+        .status(400)
+        .json({ message: "No valid fields provided for update" });
     }
 
     const user = await prisma.user.update({
@@ -421,13 +424,15 @@ export const updateUserDetails = async (req, res) => {
       data: user,
     });
   } catch (error) {
-    console.error('Error updating user details:', error);
+    console.error("Error updating user details:", error);
 
-    if (error.code === 'P2025') {
-      return res.status(404).json({ message: 'User not found' });
+    if (error.code === "P2025") {
+      return res.status(404).json({ message: "User not found" });
     }
 
-    return res.status(500).json({ message: "Internal Server Error", error: error.message });
+    return res
+      .status(500)
+      .json({ message: "Internal Server Error", error: error.message });
   }
 };
 //change password
@@ -441,18 +446,23 @@ export const changePassword = async (req, res) => {
     }
 
     if (!currentPassword || !newPassword) {
-      return res.status(400).json({ message: "Current and new passwords are required" });
+      return res
+        .status(400)
+        .json({ message: "Current and new passwords are required" });
     }
 
     const user = await prisma.user.findUnique({
-      where: { id: userId, type: 'USER' },
+      where: { id: userId, type: "USER" },
     });
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
+    const isCurrentPasswordValid = await bcrypt.compare(
+      currentPassword,
+      user.password
+    );
     if (!isCurrentPasswordValid) {
       return res.status(401).json({ message: "Current password is incorrect" });
     }
@@ -474,8 +484,10 @@ export const changePassword = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Error changing password:', error);
-    return res.status(500).json({ message: "Internal Server Error", error: error.message });
+    console.error("Error changing password:", error);
+    return res
+      .status(500)
+      .json({ message: "Internal Server Error", error: error.message });
   }
 };
 //send mail to admin
@@ -491,7 +503,7 @@ export const sendMailToAdmin = async (req, res) => {
     }
 
     const user = await prisma.user.findUnique({
-      where: { email: user_email, id: userId, type: 'USER' },
+      where: { email: user_email, id: userId, type: "USER" },
     });
 
     if (!user) {
@@ -519,8 +531,6 @@ export const sendMailToAdmin = async (req, res) => {
       },
     });
 
-
-
     receiveEmails(user_email, subject, message);
 
     return res.status(200).json({
@@ -529,8 +539,10 @@ export const sendMailToAdmin = async (req, res) => {
       data: mail,
     });
   } catch (error) {
-    console.error('Error sending mail to admin:', error);
-    return res.status(500).json({ message: "Internal Server Error", error: error.message });
+    console.error("Error sending mail to admin:", error);
+    return res
+      .status(500)
+      .json({ message: "Internal Server Error", error: error.message });
   }
 };
 //get me
@@ -558,7 +570,9 @@ export const getMe = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    const imageUrl = user.avatar ? `http://localhost:8080/uploads/${user.avatar}` : null;
+    const imageUrl = user.avatar
+      ? `http://localhost:8080/uploads/${user.avatar}`
+      : null;
 
     return res.status(200).json({
       success: true,
@@ -566,7 +580,70 @@ export const getMe = async (req, res) => {
       data: { ...user, imageUrl },
     });
   } catch (error) {
-    console.error('Error retrieving user details:', error);
-    return res.status(500).json({ message: "Internal Server Error", error: error.message });
+    console.error("Error retrieving user details:", error);
+    return res
+      .status(500)
+      .json({ message: "Internal Server Error", error: error.message });
+  }
+};
+
+// Google login via ID token from frontend
+export const googleLogin = async (req, res) => {
+  const { idToken } = req.body;
+  if (!idToken) {
+    return res.status(400).json({ message: "ID token is required" });
+  }
+  const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+  try {
+    const ticket = await client.verifyIdToken({
+      idToken,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    const email = payload.email;
+    const name = payload.name;
+    const avatar = payload.picture;
+    // Find or create user
+    let user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          email,
+          name,
+          avatar,
+          password: "", // No password for Google users
+          type: "USER",
+        },
+      });
+    } else {
+      // Optionally update name/avatar if changed
+      user = await prisma.user.update({
+        where: { email },
+        data: { name, avatar },
+      });
+    }
+    // Issue JWT for session
+    const token = jwt.sign(
+      { userId: user.id, email: user.email, role: user.role, type: user.type },
+      process.env.JWT_SECRET,
+      { expiresIn: "100d" }
+    );
+    return res.status(200).json({
+      success: true,
+      message: "Google login successful",
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        avatar: user.avatar,
+      },
+      token,
+    });
+  } catch (error) {
+    return res.status(401).json({
+      success: false,
+      message: "Invalid Google token",
+      error: error.message,
+    });
   }
 };
