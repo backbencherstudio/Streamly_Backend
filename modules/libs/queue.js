@@ -1,9 +1,11 @@
 import { Queue } from 'bullmq';
 import IORedis from 'ioredis';
 
-const url = process.env.REDIS_URL || 'redis://localhost:6379';
+const url =  process.env.REDIS_HOST;
 
 export const connection = new IORedis(url, {
+    port: process.env.REDIS_PORT,
+    password: process.env.REDIS_PASSWORD,
     maxRetriesPerRequest: null,
 
     retryStrategy: times => Math.min(times * 500, 5000),
