@@ -604,7 +604,13 @@ export const googleLogin = async (req, res) => {
     });
 
     const payload = ticket.getPayload();
+    console.log('Google Token Payload:', payload); // Log the payload for debugging
+
+    // Check if email exists in the payload
     const email = payload.email;
+    if (!email) {
+      return res.status(400).json({ success: false, message: "Email is missing from the Google token payload" });
+    }
     const name = payload.name;
     const avatar = payload.picture;
     
@@ -619,7 +625,6 @@ export const googleLogin = async (req, res) => {
           name,
           avatar,
           password: "", // No password needed for Google login
-          type: "USER", // Adjust as necessary
         },
       });
     } else {
@@ -634,7 +639,7 @@ export const googleLogin = async (req, res) => {
     const token = jwt.sign(
       { userId: user.id, email: user.email, role: user.role, type: user.type, googleId: payload.sub },
       process.env.JWT_SECRET,
-      { expiresIn: "100d" }
+      { expiresIn: "7d" }
     );
 
     // Send back the success response with user data and token
