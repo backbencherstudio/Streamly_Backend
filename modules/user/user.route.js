@@ -52,7 +52,7 @@ router.put('/update-user-details', verifyUser("normal"), updateUserDetails);
 
 
 //support
-router.post("/sende-mail", verifyUser("USER"), sendMailToAdmin);
+router.post('/sende-mail', verifyUser("USER"), sendMailToAdmin)
 
 
 //get me 
