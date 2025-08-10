@@ -561,8 +561,8 @@ export const getMe = async (req, res) => {
         name: true,
         email: true,
         avatar: true,
-        createdAt: true,
-        updatedAt: true,
+        created_at: true,
+        updated_at: true,
       },
     });
 
