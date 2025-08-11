@@ -11,9 +11,6 @@ r.get('/allContents', async (req, res) => {
   try {
     const rows = await prisma.content.findMany({
       orderBy: { created_at: 'desc' },
-      include: {
-        category: true,
-      },
       select: {
         id: true,
         title: true,
@@ -25,6 +22,7 @@ r.get('/allContents', async (req, res) => {
         status: true,
         created_at: true,
         content_status: true,
+        view_count: true,
         category: {
           select: {
             id: true,
@@ -33,6 +31,7 @@ r.get('/allContents', async (req, res) => {
         },
       },
     });
+    
 
     // Construct full URLs for video and thumbnails
     const minioEndpoint = process.env.AWS_S3_ENDPOINT || 'http://localhost:9000'; // Default to MinIO if not set
