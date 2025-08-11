@@ -392,7 +392,6 @@ export const updateImage = async (req, res) => {
   }
 };
 
-
 //update user details
 export const updateUserDetails = async (req, res) => {
   try {
@@ -407,7 +406,7 @@ export const updateUserDetails = async (req, res) => {
       postalCode,
       language,
       phone,
-      bio
+      bio,
     } = req.body;
     const id = req.user?.userId;
 
@@ -416,25 +415,28 @@ export const updateUserDetails = async (req, res) => {
     }
 
     const dataToUpdate = {};
-    if (name) dataToUpdate.name = name;
-    if (email) dataToUpdate.email = email;
-    if (dateOfBirth) dataToUpdate.dateOfBirth = dateOfBirth;
-    if (address) dataToUpdate.address = address;
-    if (country) dataToUpdate.country = country;
-    if (city) dataToUpdate.city = city;
-    if (state) dataToUpdate.state = state;
-    if (postalCode) dataToUpdate.postalCode = postalCode;
-    if (language) dataToUpdate.language = language;
-    if (phone) dataToUpdate.phone = phone;
-    if (bio) dataToUpdate.bio = bio;
 
     if (Object.keys(dataToUpdate).length === 0) {
-      return res.status(400).json({ message: "No valid fields provided for update" });
+      return res
+        .status(400)
+        .json({ message: "No valid fields provided for update" });
     }
 
     const user = await prisma.user.update({
       where: { id: id },
-      data: dataToUpdate,
+      data: {
+        name: dataToUpdate.name,
+        email: dataToUpdate.email,
+        dateOfBirth: dataToUpdate.dateOfBirth,
+        address: dataToUpdate.address,
+        country: dataToUpdate.country,
+        city: dataToUpdate.city,
+        state: dataToUpdate.state,
+        postalCode: dataToUpdate.postalCode,
+        language: dataToUpdate.language,
+        phone: dataToUpdate.phone,
+        bio: dataToUpdate.bio,
+      },
     });
 
     return res.status(200).json({
@@ -442,16 +444,16 @@ export const updateUserDetails = async (req, res) => {
       message: "User details updated successfully",
       data: user,
     });
-    
   } catch (error) {
     console.error("Error updating user details:", error);
     if (error.code === "P2025") {
       return res.status(404).json({ message: "User not found" });
     }
-    return res.status(500).json({ message: "Internal Server Error", error: error.message });
+    return res
+      .status(500)
+      .json({ message: "Internal Server Error", error: error.message });
   }
 };
-
 
 //change password
 export const changePassword = async (req, res) => {
@@ -613,7 +615,7 @@ export const googleLogin = async (req, res) => {
   }
 
   const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
-  
+
   try {
     // Verify the ID Token with Google
     const ticket = await client.verifyIdToken({
@@ -622,19 +624,22 @@ export const googleLogin = async (req, res) => {
     });
 
     const payload = ticket.getPayload();
-    console.log('Google Token Payload:', payload); // Log the payload for debugging
+    console.log("Google Token Payload:", payload); // Log the payload for debugging
 
     // Check if email exists in the payload
     const email = payload.email;
     if (!email) {
-      return res.status(400).json({ success: false, message: "Email is missing from the Google token payload" });
+      return res.status(400).json({
+        success: false,
+        message: "Email is missing from the Google token payload",
+      });
     }
     const name = payload.name;
     const avatar = payload.picture;
-    
+
     // Check if the user already exists in the database
     let user = await prisma.user.findUnique({ where: { email } });
-    
+
     if (!user) {
       // Create new user if they do not exist
       user = await prisma.user.create({
@@ -655,7 +660,13 @@ export const googleLogin = async (req, res) => {
 
     // Issue a JWT token for the session
     const token = jwt.sign(
-      { userId: user.id, email: user.email, role: user.role, type: user.type, googleId: payload.sub },
+      {
+        userId: user.id,
+        email: user.email,
+        role: user.role,
+        type: user.type,
+        googleId: payload.sub,
+      },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
