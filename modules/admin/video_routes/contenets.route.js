@@ -33,18 +33,25 @@ r.get('/allContents', async (req, res) => {
     });
     
 
-    // Construct full URLs for video and thumbnails
-    const minioEndpoint = process.env.AWS_S3_ENDPOINT || 'http://localhost:9000'; // Default to MinIO if not set
-    const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || 'http://localhost:8080'; // Fallback for local storage
+    // Construct full URLs for video and thumbnails depending on storage
+    const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || 'http://localhost:8080';
+    const buildS3Url = (bucket, key) => {
+      if (!bucket || !key) return null;
+      if (process.env.AWS_S3_ENDPOINT) {
+        return `${process.env.AWS_S3_ENDPOINT}/${bucket}/${key}`;
+      }
+      const region = process.env.AWS_REGION || 'us-east-1';
+      return `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
+    };
+
+    const buildLocalUrl = (file) => (file ? `${PUBLIC_BASE_URL}/uploads/${file}` : null);
 
     const serializedRows = rows.map(row => {
-      const videoUrl = `${minioEndpoint}/${row.s3_bucket}/${row.s3_key}`;
-      const thumbnailUrl = row.s3_thumb_key
-        ? `${minioEndpoint}/${row.s3_bucket}/${row.s3_thumb_key}`
-        : null;
+      const videoUrl = buildS3Url(row.s3_bucket, row.s3_key) || buildLocalUrl(row.video);
+      const thumbnailUrl = buildS3Url(row.s3_bucket, row.s3_thumb_key) || buildLocalUrl(row.thumbnail);
 
       return {
-        ...serialize(row), // Serialize the content as needed
+        ...serialize(row),
         videoUrl,
         thumbnailUrl,
       };
