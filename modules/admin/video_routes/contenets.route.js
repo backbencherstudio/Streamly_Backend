@@ -20,6 +20,7 @@ r.get('/allContents', async (req, res) => {
         genre: true,
         content_type: true,
         original_name: true,
+        type: true,
         file_size_bytes: true,
         status: true,
         created_at: true,
