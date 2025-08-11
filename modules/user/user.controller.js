@@ -414,28 +414,22 @@ export const updateUserDetails = async (req, res) => {
       return res.status(400).json({ message: "User not authenticated" });
     }
 
-    const dataToUpdate = {};
 
-    if (Object.keys(dataToUpdate).length === 0) {
-      return res
-        .status(400)
-        .json({ message: "No valid fields provided for update" });
-    }
 
     const user = await prisma.user.update({
       where: { id: id },
       data: {
-        name: dataToUpdate.name,
-        email: dataToUpdate.email,
-        dateOfBirth: dataToUpdate.dateOfBirth,
-        address: dataToUpdate.address,
-        country: dataToUpdate.country,
-        city: dataToUpdate.city,
-        state: dataToUpdate.state,
-        postalCode: dataToUpdate.postalCode,
-        language: dataToUpdate.language,
-        phone: dataToUpdate.phone,
-        bio: dataToUpdate.bio,
+        name: name,
+        email: email,
+        dateOfBirth: dateOfBirth,
+        address: address,
+        country: country,
+        city: city,
+        state: state,
+        postalCode: postalCode,
+        language: language,
+        phone: phone,
+        bio: bio,
       },
     });
 
