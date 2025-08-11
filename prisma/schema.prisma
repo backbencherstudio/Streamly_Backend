@@ -55,6 +55,7 @@ model User {
   date_of_birth          DateTime?      @db.Date
   city                   String?
   phone_number           String?
+  suspend_endTime        DateTime?
   state                  String?
   postal_code            String?
   is_subscribed          Boolean?      @default(false) // for newsletter subscription
