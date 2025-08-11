@@ -33,10 +33,10 @@ export const createPaymentIntent = async (req, res) => {
           currency,
           payment_method: paymentMethodId,
           metadata: {
-            user_id: "cmdse9ng90000rexck7fwfwxs",
+            user_id: "cme6lsmz80000reqgl7j0lmqz",
             user_email: email,
             user_role: role,
-            service_id : 'cme43ky160000rebkdbrnsr71',
+            service_id : 'cme6oh92o0000rey4iq2uy1au',
             plan: service.plan || 'basic',
           }
         });
@@ -121,7 +121,7 @@ const handlePaymentIntentSucceeded = async (paymentIntent) => {
     try {
       // 1. Update user 
       const userUpdate = await prismaTx.user.update({
-        where: { id: 'cmdse9ng90000rexck7fwfwxs' },
+        where: { id: 'cme6lsmz80000reqgl7j0lmqz' },
         select: { name: true },
         data: {
           role: "premium",

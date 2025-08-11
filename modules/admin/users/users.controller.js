@@ -55,3 +55,34 @@ export const suspendUser = async (req, res) => {
     console.log('Error suspending user:', err);
   }
 };
+
+
+export const getAllSubcribedUsers = async (req, res) => {
+  try {
+    const users = await prisma.user.findMany({
+      where: { is_subscribed: true },
+      orderBy: { created_at: 'desc' },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        status: true,
+        role: true,
+        created_at: true,
+        updated_at: true,
+        Subscription: {
+          select: {
+            status: true,
+            start_date: true,
+            end_date: true,
+            plan: true,
+          },
+        },
+      },
+    });
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch subscribed users' });
+    console.log('Error fetching subscribed users:', err);
+  }
+}
