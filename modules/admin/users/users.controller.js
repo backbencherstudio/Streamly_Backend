@@ -41,3 +41,17 @@ export const getAllUsers = async (req, res) => {
     
   }
 }
+
+export const suspendUser = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const user = await prisma.user.update({
+      where: { id: Number(id) },
+      data: { status: 'suspended' },
+    });
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to suspend user' });
+    console.log('Error suspending user:', err);
+  }
+};
