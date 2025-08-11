@@ -93,6 +93,34 @@ nodeCron.schedule("0 0 * * *", async () => {
   }
 });
 
+// Cron job to unsuspend users
+nodeCron.schedule("* * * * *", async () => {
+  try {
+    const now = new Date();
+    console.log(`Cron job running at: ${now.toISOString()}`);
+    const usersToUpdate = await prisma.user.findMany({
+      where: {
+        status: "suspended",
+        suspend_endTime: {
+          lte: now,
+        },
+      },
+    });
+    if (usersToUpdate.length >= 0) {
+      await prisma.user.updateMany({
+        where: { id: { in: usersToUpdate.map((user) => user.id) } },
+        data: { status: "active", suspend_endTime: null },
+      });
+      console.log(`Unsuspended ${usersToUpdate.length} users.`);
+    }
+    
+  } catch (error) {
+    console.log("error is:", error);
+
+  }
+  
+})
+
 //JSON parser + Webhook exception
 app.use((req, res, next) => {
   if (req.originalUrl === "/api/payments/webhook") {
@@ -112,6 +140,7 @@ app.use("/api/contents", contentsRoutes);
 app.use("/api/payments", pay);
 app.use("/api/admin/categories", createRoutes);
 app.use("/api/admin/user", usermanagementRoutes);
+
 //Resolve __dirname for ESM
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
