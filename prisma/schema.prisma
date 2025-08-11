@@ -76,6 +76,7 @@ model User {
   EmailHistoryRecipient EmailHistoryRecipient[]
 
   @@map("users ")
+  Rating Rating[]
 }
 
 model UserPaymentMethod {
@@ -330,6 +331,26 @@ model Content {
 
   thumbnail        String?         // optional public URL
   video            String?         // optional public URL
+
+  Rating Rating[]
+}
+
+model Rating {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+  deleted_at DateTime?
+
+  user_id String?
+  user    User?   @relation(fields: [user_id], references: [id])
+
+  content_id String?
+  content   Content? @relation(fields: [content_id], references: [id])
+
+  rating Int? @default(0) 
+  comment String?
+
+  @@map("ratings")
 }
 
 
