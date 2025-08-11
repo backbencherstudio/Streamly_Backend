@@ -45,7 +45,7 @@ app.use(
 
 //Cron job
 let counter = 0;
-nodeCron.schedule("0 * * * *", async () => {
+nodeCron.schedule("0 0 * * *", async () => {
   try {
     const now = new Date();
     console.log(
@@ -57,7 +57,7 @@ nodeCron.schedule("0 * * * *", async () => {
         end_date: {
           lte: now,
         },
-        status: "Active",
+        status: "active",
       },
       take: batchSize,
       include: {
