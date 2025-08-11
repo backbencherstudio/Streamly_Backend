@@ -57,8 +57,9 @@ async function generateChecksum(localPath) {
 }
 
 // Utility function to upload to S3
-async function uploadToS3(localPath, contentId, ext, mime) {
-  const key = `videos/${contentId}${ext}`;
+// Allows specifying a prefix (e.g. "videos" or "thumbnails")
+async function uploadToS3(localPath, contentId, ext, mime, prefix = 'videos') {
+  const key = `${prefix}/${contentId}${ext}`;
 
   const uploader = new Upload({
     client: s3,
@@ -89,7 +90,7 @@ async function uploadToS3(localPath, contentId, ext, mime) {
 // Worker for processing media uploads
 const worker = new Worker('media', async (job) => {
   if (job.name !== 'push-to-s3') return;
-  const { contentId, localPath } = job.data;
+  const { contentId, localPath, thumbnailPath } = job.data;
 
   let durationSec = 0; 
   try {
@@ -110,8 +111,17 @@ const worker = new Worker('media', async (job) => {
 
     const checksum = await generateChecksum(localPath);
 
-    // Upload video to S3
-    const result = await uploadToS3(localPath, contentId, ext, mime);
+    // Upload video to S3/MinIO
+    const result = await uploadToS3(localPath, contentId, ext, mime, 'videos');
+
+    // Upload thumbnail if provided
+    let thumbResult = null;
+    if (thumbnailPath) {
+      const thumbExt = path.extname(thumbnailPath).toLowerCase();
+      const thumbMime = getMimeType(thumbExt);
+      thumbResult = await uploadToS3(thumbnailPath, contentId, thumbExt, thumbMime, 'thumbnails');
+    }
+
     console.log('[s3] done', { ETag: result?.ETag, key: result?.Key });
 
     await prisma.content.update({
@@ -120,14 +130,16 @@ const worker = new Worker('media', async (job) => {
         content_status: 'processing',
         s3_bucket: bucket,
         s3_key: result?.Key,
+        s3_thumb_key: thumbResult?.Key ?? null,
         etag: result?.ETag ?? null,
         checksum_sha256: checksum,
-        storage_provider: process.env.AWS_S3_ENDPOINT ? 'local' : 's3',
+        storage_provider: process.env.AWS_S3_ENDPOINT ? 'minio' : 's3',
       },
     });
 
-    // Cleanup original file
+    // Cleanup original files
     await unlink(localPath).catch(() => {});
+    if (thumbnailPath) await unlink(thumbnailPath).catch(() => {});
 
     await prisma.content.update({
       where: { id: contentId },
@@ -150,8 +162,13 @@ worker.on('failed', (job, err) => console.error('[worker] failed event', job?.id
 worker.on('completed', (job) => console.log('[worker] completed event', job?.id));
 
 function getMimeType(ext) {
-  return ext === '.mp4' ? 'video/mp4' :
-         ext === '.mov' ? 'video/quicktime' :
-         ext === '.mkv' ? 'video/x-matroska' :
-         'application/octet-stream';
+  switch (ext) {
+    case '.mp4': return 'video/mp4';
+    case '.mov': return 'video/quicktime';
+    case '.mkv': return 'video/x-matroska';
+    case '.png': return 'image/png';
+    case '.jpg':
+    case '.jpeg': return 'image/jpeg';
+    default: return 'application/octet-stream';
+  }
 }
