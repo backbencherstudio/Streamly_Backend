@@ -22,31 +22,39 @@ const storage = multer.diskStorage({
 });
 const upload = multer({
   storage,
-  limits: { fileSize: 30 * 1024 * 1024 * 1024 }, // 30 GB
+  limits: { fileSize: 30 * 1024 * 1024 * 1024 },
 });
-router.post('/video', upload.single('file'), async (req, res, next) => {
-  try {
-    if (!req.file) return res.status(400).json({ error: 'file required' });
 
-    const { title, description, genre } = req.body;
-    const f = req.file;
+router.post('/video', upload.fields([
+  { name: 'file', maxCount: 1 }, 
+  { name: 'thumbnail', maxCount: 1 } 
+]), async (req, res, next) => {
+  try {
+    if (!req.files || !req.files.file) return res.status(400).json({ error: 'Video file is required' });
+
+    const { title, description, genre, category_id } = req.body;
+    const videoFile = req.files.file[0]; 
+    const thumbnailFile = req.files.thumbnail ? req.files.thumbnail[0] : null;
 
     const content = await prisma.content.create({
       data: {
         title: title ?? null,
         description: description ?? null,
         genre: genre ?? null,
-        content_type: f.mimetype,
-        original_name: f.originalname,
-        file_size_bytes: BigInt(f.size),
+        category_id: category_id,
+        content_type: videoFile.mimetype,
+        original_name: videoFile.originalname,
+        file_size_bytes: BigInt(videoFile.size),
         storage_provider: 'local',
         content_status: 'uploading_local',
+        thumbnail: thumbnailFile ? thumbnailFile.filename : null,
       },
     });
 
     await mediaQueue.add('push-to-s3', {
       contentId: content.id,
-      localPath: f.path,
+      localPath: videoFile.path,
+      thumbnailPath: thumbnailFile ? thumbnailFile.path : null,
     }, {
       attempts: 5,
       backoff: { type: 'exponential', delay: 30_000 },
@@ -57,8 +65,10 @@ router.post('/video', upload.single('file'), async (req, res, next) => {
     res.json({ id: content.id, status: content.content_status });
   } catch (err) {
     next(err);
+    console.log('Error uploading video and thumbnail:', err);
   }
 });
+
 
 //get all uploads
 router.get('/', async (req, res) => {

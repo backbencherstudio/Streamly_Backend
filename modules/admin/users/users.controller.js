@@ -27,7 +27,7 @@ export const getAllUsers = async (req, res) => {
         PaymentTransaction: {
           select: {
             id: true,
-            amount: true,
+             price: true,
             status: true,
             created_at: true,
           },

@@ -28,12 +28,8 @@ model Temp {
 enum Status {
   active
   inactive
+  suspended
   expired
-}
-
-enum StatusUser {
-  Active 
-  Banned
 }
 
 enum Role {
@@ -259,7 +255,6 @@ model Favourite {
   id         String   @id @default(cuid())
   created_at DateTime @default(now())
 }
-
 model Admin_settings {
   id         String   @id @default(cuid())
   created_at DateTime @default(now())
@@ -301,6 +296,11 @@ enum Content_status {
   failed
 }
 
+enum statusType {
+published
+draft
+}
+
 model Content {
   id               String          @id @default(cuid())
   created_at       DateTime?       @default(now())
@@ -323,6 +323,9 @@ model Content {
   file_size_bytes  BigInt?
   etag             String?
   checksum_sha256  String?
+  status           statusType? @default(published) 
+  type             String?       @default("4k") 
+  view_count       Int?          @default(0)
 
   thumbnail        String?         // optional public URL
   video            String?         // optional public URL
