@@ -144,7 +144,7 @@ const worker = new Worker('media', async (job) => {
     await markFailed(contentId, err?.message || err);
     throw err;
   }
-}, { connection, concurrency: 10 });
+}, { connection, concurrency: 2 });
 
 worker.on('failed', (job, err) => console.error('[worker] failed event', job?.id, err?.message));
 worker.on('completed', (job) => console.log('[worker] completed event', job?.id));

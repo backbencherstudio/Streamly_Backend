@@ -11,6 +11,7 @@ import contentsRoutes from "./modules/admin/video_routes/contenets.route.js";
 import pay from "./modules/paymnet/stripe.route.js";
 import createRoutes from "./modules/admin/create-category/create_category.route.js";
 import usermanagementRoutes from "./modules/admin/users/users.route.js";
+import ratingRoutes from "./modules/rating/rating.route.js";
 //Import Swagger spec and UI
 import { swaggerSpec } from "./swagger/index.js";
 import swaggerUi from "swagger-ui-express";
@@ -140,6 +141,7 @@ app.use("/api/contents", contentsRoutes);
 app.use("/api/payments", pay);
 app.use("/api/admin/categories", createRoutes);
 app.use("/api/admin/user", usermanagementRoutes);
+app.use("/api/ratings", ratingRoutes);
 
 //Resolve __dirname for ESM
 const __filename = fileURLToPath(import.meta.url);
