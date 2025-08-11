@@ -391,10 +391,24 @@ export const updateImage = async (req, res) => {
     });
   }
 };
+
+
 //update user details
 export const updateUserDetails = async (req, res) => {
   try {
-    const { name, email, address } = req.body;
+    const {
+      name,
+      email,
+      dateOfBirth,
+      address,
+      country,
+      city,
+      state,
+      postalCode,
+      language,
+      phone,
+      bio
+    } = req.body;
     const id = req.user?.userId;
 
     if (!id) {
@@ -402,15 +416,20 @@ export const updateUserDetails = async (req, res) => {
     }
 
     const dataToUpdate = {};
-
     if (name) dataToUpdate.name = name;
     if (email) dataToUpdate.email = email;
+    if (dateOfBirth) dataToUpdate.dateOfBirth = dateOfBirth;
     if (address) dataToUpdate.address = address;
+    if (country) dataToUpdate.country = country;
+    if (city) dataToUpdate.city = city;
+    if (state) dataToUpdate.state = state;
+    if (postalCode) dataToUpdate.postalCode = postalCode;
+    if (language) dataToUpdate.language = language;
+    if (phone) dataToUpdate.phone = phone;
+    if (bio) dataToUpdate.bio = bio;
 
     if (Object.keys(dataToUpdate).length === 0) {
-      return res
-        .status(400)
-        .json({ message: "No valid fields provided for update" });
+      return res.status(400).json({ message: "No valid fields provided for update" });
     }
 
     const user = await prisma.user.update({
@@ -423,18 +442,17 @@ export const updateUserDetails = async (req, res) => {
       message: "User details updated successfully",
       data: user,
     });
+    
   } catch (error) {
     console.error("Error updating user details:", error);
-
     if (error.code === "P2025") {
       return res.status(404).json({ message: "User not found" });
     }
-
-    return res
-      .status(500)
-      .json({ message: "Internal Server Error", error: error.message });
+    return res.status(500).json({ message: "Internal Server Error", error: error.message });
   }
 };
+
+
 //change password
 export const changePassword = async (req, res) => {
   try {
