@@ -55,7 +55,7 @@ export const getAllServices = async (req, res) => {
 
 // Category CRUD operations
 export const createCategory = async (req, res) => {
-  console.log("this is the create category");
+  // console.log("this is the create category");
   try {
     const { name, slug, status } = req.body;
     if (!name || !slug) {
