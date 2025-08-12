@@ -81,6 +81,8 @@ r.get("/:id", async (req, res) => {
   res.json(serialize(row));
 });
 
+
+// Route to get contents by category
 r.get("/category/:id", async (req, res) => {
   const { id } = req.params;
   console.log("fetching contents for category:", id);
@@ -88,13 +90,23 @@ r.get("/category/:id", async (req, res) => {
     const rows = await prisma.content.findMany({
       where: { category: { id: id } },
     });
+    const serializedRows = rows.map((row) => {
+      const videoUrl = buildS3Url(row.s3_bucket, row.s3_key) || buildLocalUrl(row.video);
+      const thumbnailUrl = buildS3Url(row.s3_bucket, row.s3_thumb_key) || buildLocalUrl(row.thumbnail);
+      return {
+        ...serialize(row),
+        videoUrl,
+        thumbnailUrl,
+      };
+    });
+    res.json(serializedRows);
   } catch (error) {
     console.log("Error fetching contents for category:", error);
     res.status(500).json({ error: "Failed to fetch contents for category" });
   }
 });
 
-r.get("/recommended", verifyUser("normal", "premium"), async (req, res) => {
+r.get("/recommended", verifyUser("normal", "premium", "admin"), async (req, res) => {
   try {
     const userId = req.user.userId;
     // Get user's top genres from their ratings
@@ -136,39 +148,38 @@ r.get("/recommended", verifyUser("normal", "premium"), async (req, res) => {
   }
 });
 
-r.get("/genres", async (req, res) => {
+r.get('/popular', async (req, res) => {
   try {
-    const genres = await prisma.content.findMany({
+    const popularContents = await prisma.content.findMany({
+      orderBy: { view_count: 'desc' },
+      take: 10,
       select: {
+        id: true,
+        title: true,
         genre: true,
+        content_type: true,
+        view_count: true,
+        s3_bucket: true,
+        s3_key: true,
+        s3_thumb_key: true,
+        video: true,
+        thumbnail: true,
       },
     });
-    const uniqueGenres = [...new Set(genres.map((g) => g.genre))];
-    res.json({ success: true, genres: uniqueGenres });
-  } catch (error) {
-    console.error("Error fetching genres:", error);
-    res.status(500).json({ message: "Internal Server Error" });
-  }
-});
 
-r.get("/curated-playlists", async (req, res) => {
-  try {
-    const playlists = await prisma.playlist.findMany({
-      where: { curated: true },
-      include: {
-        contents: {
-          select: {
-            id: true,
-            title: true,
-            genre: true,
-            content_type: true,
-          },
-        },
-      },
+    const serializedContents = popularContents.map((content) => {
+      const videoUrl = buildS3Url(content.s3_bucket, content.s3_key) || buildLocalUrl(content.video);
+      const thumbnailUrl = buildS3Url(content.s3_bucket, content.s3_thumb_key) || buildLocalUrl(content.thumbnail);
+      return {
+        ...serialize(content),
+        videoUrl,
+        thumbnailUrl,
+      };
     });
-    res.json({ success: true, playlists });
+
+    res.json({ success: true, contents: serializedContents });
   } catch (error) {
-    console.error("Error fetching curated playlists:", error);
+    console.error("Error fetching popular contents:", error);
     res.status(500).json({ message: "Internal Server Error" });
   }
 });
