@@ -1,6 +1,6 @@
-import express from 'express';
-import { PrismaClient } from '@prisma/client';
-import { verifyUser } from '../../../middlewares/verifyUsers.js';  // Assuming you are using it elsewhere
+import express from "express";
+import { PrismaClient } from "@prisma/client";
+import { verifyUser } from "../../../middlewares/verifyUsers.js"; // Assuming you are using it elsewhere
 const prisma = new PrismaClient();
 const r = express.Router();
 
@@ -15,18 +15,19 @@ const buildS3Url = (bucket, key) => {
   if (process.env.AWS_S3_ENDPOINT) {
     return `${process.env.AWS_S3_ENDPOINT}/${bucket}/${key}`;
   }
-  const region = process.env.AWS_REGION || 'us-east-1';
+  const region = process.env.AWS_REGION || "us-east-1";
   return `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
 };
 
 // Helper function to build local file URL
 const buildLocalUrl = (file) => {
-  const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || 'http://localhost:4005';
+  const PUBLIC_BASE_URL =
+    process.env.PUBLIC_BASE_URL || "http://localhost:4005";
   return file ? `${PUBLIC_BASE_URL}/uploads/${file}` : null;
 };
 
 // Route to get all contents
-r.get('/allContents', async (req, res) => {
+r.get("/allContents", async (req, res) => {
   try {
     const rows = await prisma.content.findMany({
       orderBy: { created_at: "desc" },
@@ -58,8 +59,11 @@ r.get('/allContents', async (req, res) => {
 
     const serializedRows = rows.map((row) => {
       // Construct full URLs for video and thumbnails depending on storage
-      const videoUrl = buildS3Url(row.s3_bucket, row.s3_key) || buildLocalUrl(row.video);
-      const thumbnailUrl = buildS3Url(row.s3_bucket, row.s3_thumb_key) || buildLocalUrl(row.thumbnail);
+      const videoUrl =
+        buildS3Url(row.s3_bucket, row.s3_key) || buildLocalUrl(row.video);
+      const thumbnailUrl =
+        buildS3Url(row.s3_bucket, row.s3_thumb_key) ||
+        buildLocalUrl(row.thumbnail);
 
       return {
         ...serialize(row),
@@ -81,7 +85,6 @@ r.get("/:id", async (req, res) => {
   res.json(serialize(row));
 });
 
-
 // Route to get contents by category
 r.get("/category/:id", async (req, res) => {
   const { id } = req.params;
@@ -91,8 +94,11 @@ r.get("/category/:id", async (req, res) => {
       where: { category: { id: id } },
     });
     const serializedRows = rows.map((row) => {
-      const videoUrl = buildS3Url(row.s3_bucket, row.s3_key) || buildLocalUrl(row.video);
-      const thumbnailUrl = buildS3Url(row.s3_bucket, row.s3_thumb_key) || buildLocalUrl(row.thumbnail);
+      const videoUrl =
+        buildS3Url(row.s3_bucket, row.s3_key) || buildLocalUrl(row.video);
+      const thumbnailUrl =
+        buildS3Url(row.s3_bucket, row.s3_thumb_key) ||
+        buildLocalUrl(row.thumbnail);
       return {
         ...serialize(row),
         videoUrl,
@@ -106,82 +112,66 @@ r.get("/category/:id", async (req, res) => {
   }
 });
 
-r.get("/recommended", verifyUser("normal", "premium", "admin"), async (req, res) => {
-  try {
-    const userId = req.user.userId;
-    // Get user's top genres from their ratings
-    const topGenres = await prisma.rating.findMany({
-      where: { user_id: userId },
-      select: { content: { select: { genre: true } } },
-    });
-    const genreCounts = {};
-    topGenres.forEach((r) => {
-      if (r.content?.genre) {
-        genreCounts[r.content.genre] = (genreCounts[r.content.genre] || 0) + 1;
+r.get(
+  "/categories/recommended",
+  verifyUser("normal", "premium"),
+  async (req, res) => {
+    try {
+      const userId = req.user.userId;
+      // Get user's top genres from their ratings
+      const topGenres = await prisma.rating.findMany({
+        where: { user_id: userId },
+        select: { content: { select: { genre: true } } },
+      });
+      const genreCounts = {};
+      topGenres.forEach((r) => {
+        if (r.content?.genre) {
+          genreCounts[r.content.genre] =
+            (genreCounts[r.content.genre] || 0) + 1;
+        }
+      });
+      // Sort genres by frequency
+      const sortedGenres = Object.keys(genreCounts).sort(
+        (a, b) => genreCounts[b] - genreCounts[a]
+      );
+      console.log("Top genres for user:", userId, sortedGenres);
+      let recommended = [];
+      if (sortedGenres.length > 0) {
+        recommended = await prisma.content.findMany({
+          where: {
+            genre: { in: sortedGenres },
+            Rating: { none: { user_id: userId } },
+          },
+          take: 10,
+        });
+      } else {
+        // Fallback: recommend most viewed contents
+        recommended = await prisma.content.findMany({
+          orderBy: { view_count: "desc" },
+          take: 10,
+        });
       }
-    });
-    // Sort genres by frequency
-    const sortedGenres = Object.keys(genreCounts).sort(
-      (a, b) => genreCounts[b] - genreCounts[a]
-    );
-    // Recommend contents matching top genres, excluding already rated
-    let recommended = [];
-    if (sortedGenres.length > 0) {
-      recommended = await prisma.content.findMany({
-        where: {
-          genre: { in: sortedGenres },
-          Rating: { none: { user_id: userId } },
-        },
-        take: 10,
-      });
-    } else {
-      // Fallback: recommend most viewed contents
-      recommended = await prisma.content.findMany({
-        orderBy: { view_count: "desc" },
-        take: 10,
-      });
+      res.json({ success: true, recommended });
+    } catch (error) {
+      console.error("Error in recommended:", error);
+      res.status(500).json({ message: "Internal Server Error" });
     }
-    res.json({ success: true, recommended });
-  } catch (error) {
-    console.error("Error in recommended:", error);
-    res.status(500).json({ message: "Internal Server Error" });
   }
-});
+);
 
-r.get('/popular', async (req, res) => {
+r.get("/genres", async (req, res) => {
   try {
-    const popularContents = await prisma.content.findMany({
-      orderBy: { view_count: 'desc' },
-      take: 10,
+    const genres = await prisma.content.findMany({
       select: {
-        id: true,
-        title: true,
         genre: true,
-        content_type: true,
-        view_count: true,
-        s3_bucket: true,
-        s3_key: true,
-        s3_thumb_key: true,
-        video: true,
-        thumbnail: true,
       },
     });
-
-    const serializedContents = popularContents.map((content) => {
-      const videoUrl = buildS3Url(content.s3_bucket, content.s3_key) || buildLocalUrl(content.video);
-      const thumbnailUrl = buildS3Url(content.s3_bucket, content.s3_thumb_key) || buildLocalUrl(content.thumbnail);
-      return {
-        ...serialize(content),
-        videoUrl,
-        thumbnailUrl,
-      };
-    });
-
-    res.json({ success: true, contents: serializedContents });
+    const uniqueGenres = [...new Set(genres.map((g) => g.genre))];
+    res.json({ success: true, genres: uniqueGenres });
   } catch (error) {
-    console.error("Error fetching popular contents:", error);
+    console.error("Error fetching genres:", error);
     res.status(500).json({ message: "Internal Server Error" });
   }
 });
-
+ 
 export default r;
