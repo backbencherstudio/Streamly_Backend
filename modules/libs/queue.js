@@ -7,6 +7,8 @@ export const connection = new IORedis(url, {
     port: process.env.REDIS_PORT,
     password: process.env.REDIS_PASSWORD,
     maxRetriesPerRequest: null,
+    sentinelMaxConnections: 10,
+    connectTimeout: 10000,
 
     retryStrategy: times => Math.min(times * 500, 5000),
     enableReadyCheck: true,
