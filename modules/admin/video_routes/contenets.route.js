@@ -44,7 +44,6 @@ r.get('/allContents', async (req, res) => {
         s3_key: true,
         s3_thumb_key: true,
         video: true,
-        thumbnail: true,
         category: {
           select: {
             id: true,
@@ -58,11 +57,12 @@ r.get('/allContents', async (req, res) => {
       // Construct full URLs for video and thumbnails depending on storage
       const videoUrl = buildS3Url(row.s3_bucket, row.s3_key) || buildLocalUrl(row.video);
       const thumbnailUrl = buildS3Url(row.s3_bucket, row.s3_thumb_key) || buildLocalUrl(row.thumbnail);
+      const  thumbnail = thumbnailUrl ? thumbnailUrl : null;
 
       return {
         ...serialize(row),
         videoUrl,
-        thumbnailUrl,
+        thumbnail,
       };
     });
 
