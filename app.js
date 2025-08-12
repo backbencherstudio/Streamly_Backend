@@ -122,6 +122,7 @@ nodeCron.schedule("0 0 * * *", async () => {
   
 })
 
+
 //JSON parser + Webhook exception
 app.use((req, res, next) => {
   if (req.originalUrl === "/api/payments/webhook") {
