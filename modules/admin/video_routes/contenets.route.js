@@ -1,6 +1,6 @@
-import express from "express";
-import { PrismaClient } from "@prisma/client";
-import { verifyUser } from "../../../middlewares/verifyUsers.js";
+import express from 'express';
+import { PrismaClient } from '@prisma/client';
+import { verifyUser } from '../../../middlewares/verifyUsers.js';  // Assuming you are using it elsewhere
 const prisma = new PrismaClient();
 const r = express.Router();
 
@@ -9,7 +9,24 @@ const serialize = (data) =>
     JSON.stringify(data, (_, v) => (typeof v === "bigint" ? v.toString() : v))
   );
 
-r.get("/allContents", async (req, res) => {
+// Helper function to build the S3 URL
+const buildS3Url = (bucket, key) => {
+  if (!bucket || !key) return null;
+  if (process.env.AWS_S3_ENDPOINT) {
+    return `${process.env.AWS_S3_ENDPOINT}/${bucket}/${key}`;
+  }
+  const region = process.env.AWS_REGION || 'us-east-1';
+  return `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
+};
+
+// Helper function to build local file URL
+const buildLocalUrl = (file) => {
+  const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || 'http://localhost:4005';
+  return file ? `${PUBLIC_BASE_URL}/uploads/${file}` : null;
+};
+
+// Route to get all contents
+r.get('/allContents', async (req, res) => {
   try {
     const rows = await prisma.content.findMany({
       orderBy: { created_at: "desc" },
@@ -25,6 +42,11 @@ r.get("/allContents", async (req, res) => {
         created_at: true,
         content_status: true,
         view_count: true,
+        s3_bucket: true,
+        s3_key: true,
+        s3_thumb_key: true,
+        video: true,
+        thumbnail: true,
         category: {
           select: {
             id: true,
@@ -34,27 +56,10 @@ r.get("/allContents", async (req, res) => {
       },
     });
 
-    // Construct full URLs for video and thumbnails depending on storage
-    const PUBLIC_BASE_URL =
-      process.env.PUBLIC_BASE_URL || "http://localhost:8080";
-    const buildS3Url = (bucket, key) => {
-      if (!bucket || !key) return null;
-      if (process.env.AWS_S3_ENDPOINT) {
-        return `${process.env.AWS_S3_ENDPOINT}/${bucket}/${key}`;
-      }
-      const region = process.env.AWS_REGION || "us-east-1";
-      return `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
-    };
-
-    const buildLocalUrl = (file) =>
-      file ? `${PUBLIC_BASE_URL}/uploads/${file}` : null;
-
     const serializedRows = rows.map((row) => {
-      const videoUrl =
-        buildS3Url(row.s3_bucket, row.s3_key) || buildLocalUrl(row.video);
-      const thumbnailUrl =
-        buildS3Url(row.s3_bucket, row.s3_thumb_key) ||
-        buildLocalUrl(row.thumbnail);
+      // Construct full URLs for video and thumbnails depending on storage
+      const videoUrl = buildS3Url(row.s3_bucket, row.s3_key) || buildLocalUrl(row.video);
+      const thumbnailUrl = buildS3Url(row.s3_bucket, row.s3_thumb_key) || buildLocalUrl(row.thumbnail);
 
       return {
         ...serialize(row),
@@ -70,101 +75,25 @@ r.get("/allContents", async (req, res) => {
   }
 });
 
-r.get("/:id", async (req, res) => {
-  const row = await prisma.content.findUnique({ where: { id: req.params.id } });
-  if (!row) return res.status(404).json({ error: "not found" });
-  res.json(serialize(row));
-});
-
-r.get("/category/:id", async (req, res) => {
-  const { id } = req.params;
-  console.log("fetching contents for category:", id);
+// Route to get content by ID
+r.get('/:id', async (req, res) => {
   try {
-    const rows = await prisma.content.findMany({
-      where: { category: { id: id } },
+    const row = await prisma.content.findUnique({ where: { id: req.params.id } });
+    if (!row) return res.status(404).json({ error: 'not found' });
+
+    // Construct the full URLs
+    const videoUrl = buildS3Url(row.s3_bucket, row.s3_key) || buildLocalUrl(row.video);
+    const thumbnailUrl = buildS3Url(row.s3_bucket, row.s3_thumb_key) || buildLocalUrl(row.thumbnail);
+
+    // Add the URLs to the response
+    res.json({
+      ...serialize(row),
+      video: videoUrl,
+      thumbnail: thumbnailUrl,
     });
   } catch (error) {
-    console.log("Error fetching contents for category:", error);
-    res.status(500).json({ error: "Failed to fetch contents for category" });
-  }
-});
-
-r.get("/recommended", verifyUser("normal", "premium"), async (req, res) => {
-  try {
-    const userId = req.user.userId;
-    // Get user's top genres from their ratings
-    const topGenres = await prisma.rating.findMany({
-      where: { user_id: userId },
-      select: { content: { select: { genre: true } } },
-    });
-    const genreCounts = {};
-    topGenres.forEach((r) => {
-      if (r.content?.genre) {
-        genreCounts[r.content.genre] = (genreCounts[r.content.genre] || 0) + 1;
-      }
-    });
-    // Sort genres by frequency
-    const sortedGenres = Object.keys(genreCounts).sort(
-      (a, b) => genreCounts[b] - genreCounts[a]
-    );
-    // Recommend contents matching top genres, excluding already rated
-    let recommended = [];
-    if (sortedGenres.length > 0) {
-      recommended = await prisma.content.findMany({
-        where: {
-          genre: { in: sortedGenres },
-          Rating: { none: { user_id: userId } },
-        },
-        take: 10,
-      });
-    } else {
-      // Fallback: recommend most viewed contents
-      recommended = await prisma.content.findMany({
-        orderBy: { view_count: "desc" },
-        take: 10,
-      });
-    }
-    res.json({ success: true, recommended });
-  } catch (error) {
-    console.error("Error in recommended:", error);
-    res.status(500).json({ message: "Internal Server Error" });
-  }
-});
-
-r.get("/genres", async (req, res) => {
-  try {
-    const genres = await prisma.content.findMany({
-      select: {
-        genre: true,
-      },
-    });
-    const uniqueGenres = [...new Set(genres.map((g) => g.genre))];
-    res.json({ success: true, genres: uniqueGenres });
-  } catch (error) {
-    console.error("Error fetching genres:", error);
-    res.status(500).json({ message: "Internal Server Error" });
-  }
-});
-
-r.get("/curated-playlists", async (req, res) => {
-  try {
-    const playlists = await prisma.playlist.findMany({
-      where: { curated: true },
-      include: {
-        contents: {
-          select: {
-            id: true,
-            title: true,
-            genre: true,
-            content_type: true,
-          },
-        },
-      },
-    });
-    res.json({ success: true, playlists });
-  } catch (error) {
-    console.error("Error fetching curated playlists:", error);
-    res.status(500).json({ message: "Internal Server Error" });
+    console.log('Error fetching content:', error);
+    res.status(500).json({ error: 'Failed to fetch content' });
   }
 });
 
