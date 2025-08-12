@@ -95,7 +95,7 @@ nodeCron.schedule("0 0 * * *", async () => {
 });
 
 // Cron job to unsuspend users
-nodeCron.schedule("* * * * *", async () => {
+nodeCron.schedule("0 0 * * *", async () => {
   try {
     const now = new Date();
     console.log(`Cron job running at: ${now.toISOString()}`);

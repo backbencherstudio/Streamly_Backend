@@ -25,9 +25,11 @@ yarn-debug.log*
 yarn-error.log*
 
 minio-data/.minio.sys/buckets/
+minio-data/.minio.sys/pool.bin
 minio-data/.minio.sys/config/
 minio-data/.minio.sys/multipart/
 minio-data/.minio.sys/tmp/
+minio-data/.minio.sys/format.json
 minio-data/temp
 minio-data/test
 minio-data/videos-dev
