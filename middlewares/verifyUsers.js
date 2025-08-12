@@ -11,7 +11,7 @@ export const verifyUser = (...allowedRoles) => {
       return res.status(401).json({ message: "No token provided" });
     }
 
-    const token = authHeader.split(" ")[1]; 
+    const token = authHeader.split(" ")[1];
 
     if (!token) {
       return res.status(401).json({ message: "Token format is invalid" });
@@ -19,15 +19,14 @@ export const verifyUser = (...allowedRoles) => {
 
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      req.user = decoded; 
+      req.user = decoded;
       // console.log(req.user);
-      
 
       if (
         allowedRoles.length &&
         !allowedRoles.includes("ANY") &&
-        !allowedRoles.includes(req.user?.role)
-        && !allowedRoles.includes(req.user?.type) 
+        !allowedRoles.includes(req.user?.role) &&
+        !allowedRoles.includes(req.user?.type)
       ) {
         return res
           .status(403)
