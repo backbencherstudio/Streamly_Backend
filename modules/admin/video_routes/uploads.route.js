@@ -148,18 +148,16 @@ const upload = multer({
 
 // POST route for uploading video and thumbnail
 router.post('/video', upload.fields([
-  { name: 'file', maxCount: 1 },  // Video file
-  { name: 'thumbnail', maxCount: 1 },  // Thumbnail file
+  { name: 'file', maxCount: 1 }, 
+  { name: 'thumbnail', maxCount: 1 },  
 ]), async (req, res, next) => {
   try {
-    // Ensure a video file is uploaded
     if (!req.files || !req.files.file) return res.status(400).json({ error: 'Video file is required' });
 
     const { title, description, genre, category_id , type } = req.body;
-    const videoFile = req.files.file[0];  // Video file
+    const videoFile = req.files.file[0]; 
     const thumbnailFile = req.files.thumbnail ? req.files.thumbnail[0] : null;  // Optional thumbnail file
 
-    // Create content record in database
     const content = await prisma.content.create({
       data: {
         title: title ?? null,
@@ -170,17 +168,15 @@ router.post('/video', upload.fields([
         content_type: videoFile.mimetype,
         original_name: videoFile.originalname,
         file_size_bytes: BigInt(videoFile.size),
-        storage_provider: 'local',  // Indicate this is stored locally
-        content_status: 'uploading_local',  // Set initial status
+        storage_provider: 'local', 
+        content_status: 'uploading_local',
         thumbnail: thumbnailFile ? thumbnailFile.filename : null,
       },
     });
 
-    // Generate local URLs for the video and thumbnail
     const videoUrl = `/uploads/videos/${videoFile.filename}`;
     const thumbnailUrl = thumbnailFile ? `/uploads/thumbnails/${thumbnailFile.filename}` : null;
 
-    // Respond with the content ID and URLs
     res.json({
       id: content.id,
       status: content.content_status,
@@ -188,7 +184,6 @@ router.post('/video', upload.fields([
       thumbnailUrl: thumbnailUrl,
     });
 
-    // Optionally, push the video and thumbnail to an external service (e.g., S3) using mediaQueue
     await mediaQueue.add('push-to-s3', {
       contentId: content.id,
       localPath: videoFile.path,
@@ -206,9 +201,6 @@ router.post('/video', upload.fields([
   }
 });
 
-// Serve static files (video and thumbnail) from the 'tmp_uploads' directory
-// Video files will be served from '/uploads/videos/'
-// Thumbnail files will be served from '/uploads/thumbnails/'
 const app = express();
 app.use('/uploads', express.static(path.resolve(process.cwd(), 'tmp_uploads')));
 

@@ -166,21 +166,20 @@ export const getAllGenres = async (req, res) => {
   }
 };
 export const getContentsByGenre = async (req, res) => {
-  const { genre } = req.params; // Get genre from request params
+  const { genre } = req.params; 
 
   try {
-    // Query content by genre with related fields
     const contents = await prisma.content.findMany({
       where: {
-        genre: genre, // Filter content by genre
+        genre: genre,
       },
       orderBy: {
-        created_at: 'desc', // Optional: Order by creation date
+        created_at: 'desc',
       },
       include: {
         category: {
           select: {
-            name: true, // Include the category name
+            name: true,
           },
         },
       },
@@ -190,9 +189,7 @@ export const getContentsByGenre = async (req, res) => {
       return res.status(404).json({ message: `No content found for genre ${genre}` });
     }
 
-    // Map through the results to build the desired response format
     const formattedContents = contents.map((content) => {
-      // Construct the full URLs for video and thumbnail (assuming S3 or local URLs)
       const videoUrl = buildS3Url(content.s3_bucket, content.s3_key) || buildLocalUrl(content.video);
       const thumbnailUrl = buildS3Url(content.s3_bucket, content.s3_thumb_key) || buildLocalUrl(content.thumbnail);
 
@@ -201,16 +198,16 @@ export const getContentsByGenre = async (req, res) => {
         title: content.title,
         genre: content.genre,
         category: {
-          name: content.category.name, // Include category name
+          name: content.category.name,
         },
-        type: content.type, // Assuming type is a field in your Content model
+        type: content.type,
         file_size_bytes: content.file_size_bytes,
         status: content.status,
         content_status: content.content_status,
         created_at: content.created_at,
         view_count: content.view_count,
-        video: videoUrl, // Constructed video URL
-        thumbnail: thumbnailUrl, // Constructed thumbnail URL
+        video: videoUrl,
+        thumbnail: thumbnailUrl,
       };
     });
 
@@ -221,22 +218,21 @@ export const getContentsByGenre = async (req, res) => {
   }
 };
 export const getContentsBycategoryid = async (req, res) => {
-  const { category_id } = req.params; // Get category ID from request params
+  const { category_id } = req.params;
 
   try {
-    // Query content by category ID with related fields
     const contents = await prisma.content.findMany({
       where: {
-        category_id: category_id, // Filter content by category ID (use category_id)
+        category_id: category_id,
       },
       orderBy: {
-        created_at: 'desc', // Optional: Order by creation date
+        created_at: 'desc',
       },
       take:5,
       include: {
         category: {
           select: {
-            name: true, // Include the category name
+            name: true, 
           },
         },
       },
@@ -246,9 +242,7 @@ export const getContentsBycategoryid = async (req, res) => {
       return res.status(404).json({ message: `No content found for category ID ${category_id}` });
     }
 
-    // Map through the results to build the desired response format
     const formattedContents = contents.map((content) => {
-      // Construct the full URLs for video and thumbnail (assuming S3 or local URLs)
       const videoUrl = buildS3Url(content.s3_bucket, content.s3_key) || buildLocalUrl(content.video);
       const thumbnailUrl = buildS3Url(content.s3_bucket, content.s3_thumb_key) || buildLocalUrl(content.thumbnail);
 
@@ -257,16 +251,16 @@ export const getContentsBycategoryid = async (req, res) => {
         title: content.title,
         genre: content.genre,
         category: {
-          name: content.category.name, // Include category name
+          name: content.category.name,
         },
-        type: content.type, // Assuming type is a field in your Content model
+        type: content.type,
         file_size_bytes: content.file_size_bytes,
         status: content.status,
         content_status: content.content_status,
         created_at: content.created_at,
         view_count: content.view_count,
-        video: videoUrl, // Constructed video URL
-        thumbnail: thumbnailUrl, // Constructed thumbnail URL
+        video: videoUrl,
+        thumbnail: thumbnailUrl,
       };
     });
 

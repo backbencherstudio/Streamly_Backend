@@ -52,7 +52,6 @@ r.get('/allContents',verifyUser("admin"), async (req, res) => {
     });
 
     const serializedRows = rows.map((row) => {
-      // Construct full URLs for video and thumbnails depending on storage
       const video = buildS3Url(row.s3_bucket, row.s3_key) || buildLocalUrl(row.video);
       const thumbnailUrl = buildS3Url(row.s3_bucket, row.s3_thumb_key) || buildLocalUrl(row.thumbnail);
       const thumbnail = thumbnailUrl ? thumbnailUrl : null;
@@ -76,10 +75,10 @@ r.get('/allContents',verifyUser("admin"), async (req, res) => {
 });
 // Route to get content by ID
 r.get('/:id', verifyUser("admin"), async (req, res) => {
-  const { id } = req.params;  // Getting the ID from the URL parameter
+  const { id } = req.params; 
   try {
     const row = await prisma.content.findUnique({
-      where: { id: id },  // Directly use the string `id` here
+      where: { id: id },  
       select: {
         id: true,
         title: true,
@@ -106,18 +105,15 @@ r.get('/:id', verifyUser("admin"), async (req, res) => {
       return res.status(404).json({ error: 'Content not exist or maybe deleted' });
     }
 
-    // Construct full URLs for video and thumbnails depending on storage
     const video = buildS3Url(row.s3_bucket, row.s3_key) || buildLocalUrl(row.video);
     const thumbnailUrl = buildS3Url(row.s3_bucket, row.s3_thumb_key) || buildLocalUrl(row.thumbnail);
     const thumbnail = thumbnailUrl ? thumbnailUrl : null;
 
-    // Deleting unwanted fields from the response
     delete row.s3_bucket;
     delete row.s3_key;
     delete row.s3_thumb_key;
     delete row.video;
 
-    // Respond with the serialized content
     res.json({
       ...serialize(row),
       video,
