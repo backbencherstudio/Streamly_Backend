@@ -5,6 +5,7 @@ import {
   getRatingById,
   updateRating,
   deleteRating,
+  topRatedContentThisWeek,
 } from "./rating.controller.js";
 import { verifyUser } from "../../middlewares/verifyUsers.js";
 
@@ -25,5 +26,7 @@ router.put("/:id", verifyUser("normal", "premium", "admin"), updateRating);
 // Delete a rating by ID
 router.delete("/:id", verifyUser("normal", "premium", "admin"), deleteRating);
 
+// Get top-rated content this week
+router.get("/top/ratings", verifyUser("admin"), topRatedContentThisWeek);
 
 export default router;
