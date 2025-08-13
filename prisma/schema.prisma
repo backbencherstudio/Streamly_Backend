@@ -76,6 +76,9 @@ model User {
 
   EmailHistoryRecipient EmailHistoryRecipient[]
 
+  deactivationDate    DateTime?
+  deactivationPeriod   Int?
+
   @@map("users ")
   Rating Rating[]
   Favourite Favourite[]
