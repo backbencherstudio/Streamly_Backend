@@ -9,6 +9,9 @@ import {
   getCategories,
   updateCategory,
   deleteCategory,
+  getAllGenres,
+  getContentsByGenre,
+  getContentsBycategoryid,
 } from "./create_category.controller.js";
 import { get } from "http";
 import { verifyAdmin } from "../../../middlewares/verifyAdmin.js";
@@ -25,5 +28,10 @@ router.delete("/categories/:id", verifyAdmin, deleteCategory);
 // Existing service routes
 router.post("/create_service", createService);
 router.get("/services", getAllServices);
+
+
+router.get("/getAllGenres", getAllGenres);
+router.get("/getContentsByGenre/:genre", getContentsByGenre);
+router.get("/getContentsByCategoryID/:id", getContentsBycategoryid);
 
 export default router;
