@@ -13,6 +13,7 @@ import usermanagementRoutes from "./modules/admin/users/users.route.js";
 import ratingRoutes from "./modules/rating/rating.route.js";
 import contentsRoute from "./modules/admin/video_routes/contenets.route.js";
 import favouriteRoutes from "./modules/Favourite/favourite.route.js";
+import adminSettingsRoutes from "./modules/admin/settings/admin_settigns.route.js";
 //Import Swagger spec and UI
 import { swaggerSpec } from "./swagger/index.js";
 import swaggerUi from "swagger-ui-express";
@@ -120,7 +121,6 @@ nodeCron.schedule("0 0 * * *", async () => {
   }
 });
 
-
 //JSON parser + Webhook exception
 app.use((req, res, next) => {
   if (req.originalUrl === "/api/payments/webhook") {
@@ -140,6 +140,7 @@ app.use("/api/contents", contentsRoute);
 app.use("/api/payments", pay);
 app.use("/api/admin/categories", createRoutes);
 app.use("/api/admin/user", usermanagementRoutes);
+app.use("/api/admin/settings", adminSettingsRoutes);
 app.use("/api/ratings", ratingRoutes);
 app.use("/api/favourites", favouriteRoutes);
 
