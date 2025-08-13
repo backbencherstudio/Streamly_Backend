@@ -101,3 +101,33 @@ export const deleteRating = async (req, res) => {
   }
 };
 
+export const topRatedContentThisWeek = async (req, res) => {
+  try {
+    // Get top 3 rated content in the last 7 days
+    const topRatings = await prisma.rating.groupBy({
+      by: ['content_id'],
+      _avg: {
+        rating: true,
+      },
+      orderBy: {
+        _avg: {
+          rating: 'desc', // Sort by average rating in descending order
+        },
+      },
+      take: 3, // Limit to the top 3 rated content
+      where: {
+        created_at: {
+          gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // Last 7 days
+        },
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: topRatings,
+    });
+  } catch (error) {
+    console.error('Error in topRatedContentThisWeek:', error);
+    return res.status(500).json({ message: 'Internal Server Error' });
+  }
+};
