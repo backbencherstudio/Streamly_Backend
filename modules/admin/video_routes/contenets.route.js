@@ -35,12 +35,14 @@ r.get('/allContents',verifyUser("admin"), async (req, res) => {
         genre: true,
         category: {
           select: {
+           id: true,
             name: true,
           },
         },
         type: true,
         file_size_bytes: true,
         status: true,
+        category_id: true,
         content_status: true,
         created_at: true,
         view_count: true,
@@ -73,6 +75,7 @@ r.get('/allContents',verifyUser("admin"), async (req, res) => {
     res.status(500).json({ error: "Failed to fetch contents" });
   }
 });
+
 // Route to get content by ID
 r.get('/:id', verifyUser("admin"), async (req, res) => {
   const { id } = req.params; 
@@ -83,11 +86,7 @@ r.get('/:id', verifyUser("admin"), async (req, res) => {
         id: true,
         title: true,
         genre: true,
-        category: {
-          select: {
-            name: true,
-          },
-        },
+        category_id: true,
         type: true,
         file_size_bytes: true,
         status: true,
@@ -124,5 +123,51 @@ r.get('/:id', verifyUser("admin"), async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch content' });
   }
 });
+
+r.get("/getoneWithcat/:id", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // Use findMany instead of findUnique to retrieve multiple contents
+    const contents = await prisma.content.findMany({
+      where: {
+        category_id: id,  // category_id is not unique, so use findMany
+      },
+    });
+
+    if (contents.length === 0) {
+      return res.status(404).json({ message: `No content found for category ID ${id}` });
+    }
+
+    // Map through the contents and format them
+    const formattedContents = contents.map((content) => {
+      const videoUrl = buildS3Url(content.s3_bucket, content.s3_key) || buildLocalUrl(content.video);
+      const thumbnailUrl = buildS3Url(content.s3_bucket, content.s3_thumb_key) || buildLocalUrl(content.thumbnail);
+ 
+      delete content.s3_bucket;
+      delete content.s3_key;
+      delete content.s3_thumb_key;
+      delete content.video;
+      delete content.duration;
+      delete content.storage_provider;
+      delete content.original_name;
+      delete content.checksum_sha256;
+      delete content.content_type;
+
+      return {
+        ...serialize(content),
+        video: videoUrl,
+        thumbnail: thumbnailUrl ? thumbnailUrl : null,
+      };
+    });
+
+    res.json({ contents: formattedContents });
+  } catch (error) {
+    console.error('Error fetching content by category ID:', error);
+    res.status(500).json({ error: 'Failed to fetch content by category ID' });
+  }
+});
+
+
 
 export default r;
