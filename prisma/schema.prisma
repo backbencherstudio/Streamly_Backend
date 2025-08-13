@@ -59,6 +59,10 @@ model User {
   suspend_endTime        DateTime?
   state                  String?
   postal_code            String?
+
+  deactivation_start_date       DateTime?
+  deactivation_end_date         DateTime?
+
   is_subscribed          Boolean?      @default(false) // for newsletter subscription
   bio                    String?
   is_two_factor_enabled  Int?           @default(0)
@@ -76,8 +80,7 @@ model User {
 
   EmailHistoryRecipient EmailHistoryRecipient[]
 
-  deactivationDate    DateTime?
-  deactivationPeriod   Int?
+
 
   @@map("users ")
   Rating Rating[]
