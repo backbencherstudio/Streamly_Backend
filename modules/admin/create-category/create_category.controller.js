@@ -228,14 +228,6 @@ export const getContentsBycategoryid = async (req, res) => {
       orderBy: {
         created_at: 'desc',
       },
-      take:5,
-      include: {
-        category: {
-          select: {
-            name: true, 
-          },
-        },
-      },
     });
 
     if (contents.length === 0) {
@@ -250,9 +242,7 @@ export const getContentsBycategoryid = async (req, res) => {
         id: content.id,
         title: content.title,
         genre: content.genre,
-        category: {
-          name: content.category.name,
-        },
+        category_id: content.category_id,
         type: content.type,
         file_size_bytes: content.file_size_bytes,
         status: content.status,
