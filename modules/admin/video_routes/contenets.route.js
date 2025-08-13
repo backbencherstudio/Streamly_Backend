@@ -173,5 +173,40 @@ r.get("/genres", async (req, res) => {
     res.status(500).json({ message: "Internal Server Error" });
   }
 });
- 
+
+r.get("/latest/videos", async (req, res) => {
+  try {
+    const latestVideos = await prisma.content.findMany({
+      orderBy: { created_at: "desc" },
+      take: 3, // Limit the result to 3 videos
+    });
+
+    // console.log("latest videos:", latestVideos);
+
+    if (!latestVideos || latestVideos.length === 0) {
+      return res.status(404).json({ error: "No videos found" });
+    }
+
+    // Serialize and build URLs for the video and thumbnail
+    const serializedVideos = latestVideos.map((video) => {
+      const videoUrl =
+        buildS3Url(video.s3_bucket, video.s3_key) || buildLocalUrl(video.video);
+      const thumbnailUrl =
+        buildS3Url(video.s3_bucket, video.s3_thumb_key) ||
+        buildLocalUrl(video.thumbnail);
+
+      return {
+        ...serialize(video),
+        videoUrl,
+        thumbnailUrl,
+      };
+    });
+
+    res.json(serializedVideos);
+  } catch (error) {
+    console.error("Error fetching latest videos:", error);
+    res.status(500).json({ error: "Failed to fetch latest videos" });
+  }
+});
+
 export default r;
