@@ -121,6 +121,31 @@ nodeCron.schedule("0 0 * * *", async () => {
   }
 });
 
+// Cron job to reactivate users
+nodeCron.schedule("0 0 * * *", async () => {
+  try {
+    const now = new Date();
+    console.log(`Cron job running at: ${now.toISOString()}`);
+    const usersToUpdate = await prisma.user.findMany({
+      where: {
+        status: "deactivated",
+        deactivation_end_date: {
+          lte: now,
+        },
+      },
+    });
+    if (usersToUpdate.length > 0) {
+      await prisma.user.updateMany({
+        where: { id: { in: usersToUpdate.map((user) => user.id) } },
+        data: { status: "active", deactivation_start_date: null, deactivation_end_date: null },
+      });
+      console.log(`Reactivated ${usersToUpdate.length} users.`);
+    }
+  } catch (error) {
+    console.log("error is:", error);
+  }
+});
+
 //JSON parser + Webhook exception
 app.use((req, res, next) => {
   if (req.originalUrl === "/api/payments/webhook") {
@@ -139,6 +164,7 @@ app.use("/api/uploads", uploadsRoutes);
 app.use("/api/contents", contentsRoute);
 app.use("/api/payments", pay);
 app.use("/api/admin/categories", createRoutes);
+app.use("/api/popular/categories", createRoutes);
 app.use("/api/admin/user", usermanagementRoutes);
 app.use("/api/admin/settings", adminSettingsRoutes);
 app.use("/api/ratings", ratingRoutes);
