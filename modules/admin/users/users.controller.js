@@ -85,3 +85,13 @@ export const unsuspendUser = async (req, res) => {
     console.log("Error unsuspending user:", err);
   }
 };
+
+export const totalUsers = async (req, res) => {
+  try {
+    const count = await prisma.user.count();
+    res.json({ totalUsers: count });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch total users" });
+    console.log("Error fetching total users:", err);
+  }
+};
