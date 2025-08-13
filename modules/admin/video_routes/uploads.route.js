@@ -206,52 +206,6 @@ router.post('/video', upload.fields([
   }
 });
 
-// GET route to fetch all uploads that are in 'uploading_local' status
-router.get('/', async (req, res) => {
-  try {
-    const uploads = await prisma.content.findMany({
-      where: { content_status: 'uploading_local' },
-      orderBy: { created_at: 'desc' },
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        genre: true,
-        content_type: true,
-        original_name: true,
-        file_size_bytes: true,
-        created_at: true,
-      },
-    });
-    res.json(uploads);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch uploads' });
-  }
-});
-
-// GET route to fetch all content records
-router.get('/all', async (req, res) => {
-  try {
-    const contents = await prisma.content.findMany({
-      orderBy: { created_at: 'desc' },
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        genre: true,
-        content_type: true,
-        original_name: true,
-        file_size_bytes: true,
-        created_at: true,
-        content_status: true,
-      },
-    });
-    res.json(contents);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch contents' });
-  }
-});
-
 // Serve static files (video and thumbnail) from the 'tmp_uploads' directory
 // Video files will be served from '/uploads/videos/'
 // Thumbnail files will be served from '/uploads/thumbnails/'

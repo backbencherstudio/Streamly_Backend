@@ -73,3 +73,19 @@ export const receiveEmails = async (email, subject, message) => {
   const htmlContent = receiveEmailTemplate(email, subject, message); // Use the template function
   await sendEmail(MAIL_FROM_ADDRESS, `New message from ${email}`, htmlContent);
 };
+
+export const sendaccountDeactivationEmail = async (email) => {
+  const { MAIL_FROM_NAME, MAIL_FROM_ADDRESS } = process.env;
+  
+  if (!MAIL_FROM_NAME || !MAIL_FROM_ADDRESS) {
+    console.error("Missing required environment variables for email configuration.");
+    return;
+  }
+
+  const htmlContent = `<p>Dear User,</p>
+                       <p>Your account has been deactivated. If you have any questions, please contact support.</p>
+                       <p>Best regards,</p>
+                       <p>${MAIL_FROM_NAME}</p>`;
+  
+  await sendEmail(email, "Account Deactivation Notification", htmlContent);
+}

@@ -3,7 +3,6 @@ import Stripe from 'stripe';
 import { PrismaClient } from "@prisma/client";
 import cron from 'node-cron';
 
-//need to work here more on this
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const prisma = new PrismaClient();
@@ -216,3 +215,138 @@ const calculateSubscriptionEndDate = (startDate, plan) => {
 
   return endDate;
 };
+
+/////////-----------------------subscription-----------------------/////////
+
+export const getAllSubscriptions = async (req, res) => {
+  try {
+    const subscriptions = await prisma.subscription.findMany({
+      orderBy: { created_at: 'desc' },
+      select: {
+        id: true,
+        start_date: true,
+        end_date: true,
+        plan: true,
+        payment_method: true,
+        status: true,
+        transaction_id: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+
+        Services: {
+          select: {
+            plan: true,
+            name: true,
+            price: true,
+          },
+        },
+      },
+    });
+
+    if (subscriptions.length === 0) {
+      return res.status(201).json({ message: 'No subscriptions found' });
+    }
+
+    res.json(subscriptions);
+  } catch (error) {
+    console.error('Error fetching subscriptions:', error);
+    res.status(500).json({ error: 'Failed to fetch subscriptions' });
+  }
+};
+//Navbar
+//Total Subscribers
+export const getTotalSubscribers = async (req, res) => {
+  try {
+    const totalSubscribers = await prisma.subscription.findMany({
+      distinct: ['user_id'],
+      select: {
+        user_id: true,
+      },
+    });
+
+    res.json({ totalSubscribers: totalSubscribers.length });
+  } catch (error) {
+    console.error('Error fetching total subscribers:', error);
+    res.status(500).json({ error: 'Failed to fetch total subscribers' });
+  }
+};
+//Total Active Subscriptions
+export const getTotalActiveSubscriptions = async (req, res) => {
+  try {
+    const totalActiveSubscriptions = await prisma.subscription.count({
+      where: { status: 'active' },
+    });
+
+    if (totalActiveSubscriptions === 0) {
+      return res.status(201).json({ message: 'Currently no subscription is avilable' });
+    }
+    res.json({ totalActiveSubscriptions });
+  } catch (error) {
+    console.error('Error fetching total active subscriptions:', error);
+    res.status(500).json({ error: 'Failed to fetch total active subscriptions' });
+  }
+}
+//Total Monthly Revenue
+export const getTotalMonthlyRevenue = async (req, res) => {
+  try {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const totalRevenue = await prisma.paymentTransaction.aggregate({
+      _sum: {
+        price: true,
+      },
+      where: {
+        status: 'succeeded',
+        created_at: {
+          gte: startOfMonth,
+        },
+      },
+    });
+
+    if (totalRevenue._sum.price === null) {
+      return res.status(201).json({ message: 'No revenue data available for this month' });
+    }
+
+    res.json({ totalMonthlyRevenue: totalRevenue._sum.price || 0 });
+  } catch (error) {
+    console.error('Error fetching total monthly revenue:', error);
+    res.status(500).json({ error: 'Failed to fetch total monthly revenue' });
+  }
+}
+//Get avg subscription value
+export const getAvgSubsctiptionValue = async (req, res) => {
+  try {
+    const totalRevenue = await prisma.paymentTransaction.aggregate({
+      _sum: {
+        price: true,
+      },
+      where: {
+        status: 'succeeded',
+      },
+    });
+
+    const totalSubscriptions = await prisma.subscription.count({
+      where: { status: 'active' },
+    });
+
+    const avgSubscriptionValue = totalSubscriptions > 0
+      ? totalRevenue._sum.price / totalSubscriptions
+      : 0;
+
+      if (avgSubscriptionValue === 0) {
+        return res.status(201).json({ message: 'No active subscriptions found' });
+      }
+
+    res.json({ avgSubscriptionValue });
+  } catch (error) {
+    console.error('Error fetching average subscription value:', error);
+    res.status(500).json({ error: 'Failed to fetch average subscription value' });
+  }
+}
+
