@@ -11,9 +11,7 @@ import {
   deleteCategory,
   getAllGenres,
   getContentsByGenre,
-  getContentsBycategoryid,
   getCategoryById,
-  popularContentByCategoryId,
 } from "./create_category.controller.js";
 import { get } from "http";
 import { verifyAdmin } from "../../../middlewares/verifyAdmin.js";
@@ -34,9 +32,6 @@ router.get("/services", getAllServices);
 
 router.get("/getAllGenres", getAllGenres);
 router.get("/getContentsByGenre/:genre", getContentsByGenre);
-router.get("/getContentsByCategoryID/:id", getContentsBycategoryid);
 
-// popular content by category ID
-router.get("/popularContents/:id", popularContentByCategoryId);
 
 export default router;
