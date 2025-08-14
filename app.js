@@ -17,6 +17,8 @@ import adminSettingsRoutes from "./modules/admin/settings/admin_settigns.route.j
 //Import Swagger spec and UI
 import { swaggerSpec } from "./swagger/index.js";
 import swaggerUi from "swagger-ui-express";
+import { sendEmail } from "./utils/mailService.js";
+import { emailUnsuspendUser } from "./constants/email_message.js";
 
 const app = express();
 const prisma = new PrismaClient();
@@ -97,10 +99,40 @@ nodeCron.schedule("0 0 * * *", async () => {
 });
 
 // Cron job to unsuspend users
+// nodeCron.schedule("0 0 * * *", async () => {
+//   try {
+//     const now = new Date();
+//     console.log(`Cron job running at: ${now.toISOString()}`);
+//     const usersToUpdate = await prisma.user.findMany({
+//       where: {
+//         status: "suspended",
+//         suspend_endTime: {
+//           lte: now,
+//         },
+//       },
+//     });
+//     if (usersToUpdate.length >= 0) {
+//       await prisma.user.updateMany({
+//         where: { id: { in: usersToUpdate.map((user) => user.id) } },
+//         data: { status: "active", suspend_endTime: null },
+//       });
+//       console.log(`Unsuspended ${usersToUpdate.length} users.`);
+//     }
+//   } catch (error) {
+//     console.log("error is:", error);
+//   }
+// });
+
+// Cron job to unsuspend users
 nodeCron.schedule("0 0 * * *", async () => {
+  console.log("Cron job triggered at:", new Date().toISOString()); // Log to check if cron is triggering
   try {
     const now = new Date();
-    console.log(`Cron job running at: ${now.toISOString()}`);
+    console.log(
+      `Checking for suspended users to unsuspend at: ${now.toISOString()}`
+    );
+
+    // Fetch users whose suspension end time has passed
     const usersToUpdate = await prisma.user.findMany({
       where: {
         status: "suspended",
@@ -109,15 +141,79 @@ nodeCron.schedule("0 0 * * *", async () => {
         },
       },
     });
-    if (usersToUpdate.length >= 0) {
+
+    if (usersToUpdate.length > 0) {
+      console.log(`Found ${usersToUpdate.length} users to unsuspend.`);
+
+      // Unsuspend the users
       await prisma.user.updateMany({
         where: { id: { in: usersToUpdate.map((user) => user.id) } },
         data: { status: "active", suspend_endTime: null },
       });
-      console.log(`Unsuspended ${usersToUpdate.length} users.`);
+
+      // Send email to each unsuspended user
+      for (const user of usersToUpdate) {
+        const emailContent = emailUnsuspendUser(user.email); // Use the unsuspend email template
+        await sendEmail(
+          user.email,
+          "Your Account Has Been Reactivated",
+          emailContent
+        ); // Send the email
+        console.log(`Email sent to ${user.email}`);
+      }
+
+      console.log(`Unsuspended and notified ${usersToUpdate.length} users.`);
+    } else {
+      console.log("No users to unsuspend today.");
     }
   } catch (error) {
-    console.log("error is:", error);
+    console.error("Error in cron job:", error);
+  }
+});
+
+// Cron job to reactivate users
+nodeCron.schedule("0 0 * * *", async () => {
+  try {
+    const now = new Date();
+    console.log(`Cron job running at: ${now.toISOString()}`);
+
+    // Fetch users whose deactivation end time has passed
+    const usersToUpdate = await prisma.user.findMany({
+      where: {
+        status: "deactivated",
+        deactivation_end_date: {
+          lte: now,
+        },
+      },
+    });
+
+    if (usersToUpdate.length > 0) {
+      await prisma.user.updateMany({
+        where: { id: { in: usersToUpdate.map((user) => user.id) } },
+        data: {
+          status: "active",
+          deactivation_start_date: null,
+          deactivation_end_date: null,
+        },
+      });
+
+      // Send email to each reactivated user
+      for (const user of usersToUpdate) {
+        const emailContent = emailReactivateUser(user.email); // Use the reactivation email template
+        await sendEmail(
+          user.email,
+          "Your Account Has Been Reactivated",
+          emailContent
+        );
+        console.log(`Email sent to ${user.email}`);
+      }
+
+      console.log(`Reactivated and notified ${usersToUpdate.length} users.`);
+    } else {
+      console.log("No users to reactivate.");
+    }
+  } catch (error) {
+    console.error("Error in reactivation cron job:", error);
   }
 });
 
