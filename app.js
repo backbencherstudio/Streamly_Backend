@@ -137,7 +137,11 @@ nodeCron.schedule("0 0 * * *", async () => {
     if (usersToUpdate.length > 0) {
       await prisma.user.updateMany({
         where: { id: { in: usersToUpdate.map((user) => user.id) } },
-        data: { status: "active", deactivation_start_date: null, deactivation_end_date: null },
+        data: {
+          status: "active",
+          deactivation_start_date: null,
+          deactivation_end_date: null,
+        },
       });
       console.log(`Reactivated ${usersToUpdate.length} users.`);
     }
@@ -164,7 +168,6 @@ app.use("/api/uploads", uploadsRoutes);
 app.use("/api/contents", contentsRoute);
 app.use("/api/payments", pay);
 app.use("/api/admin/categories", createRoutes);
-app.use("/api/popular/categories", createRoutes);
 app.use("/api/admin/user", usermanagementRoutes);
 app.use("/api/admin/settings", adminSettingsRoutes);
 app.use("/api/ratings", ratingRoutes);
@@ -195,5 +198,7 @@ app.use((err, req, res, next) => {
 });
 
 app.use(express.static(path.join(__dirname, "public")));
+
+
 
 export default app;
