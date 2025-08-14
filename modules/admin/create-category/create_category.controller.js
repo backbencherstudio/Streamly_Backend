@@ -278,9 +278,7 @@ export const getContentsBycategoryid = async (req, res) => {
         id: content.id,
         title: content.title,
         genre: content.genre,
-        category: {
-          name: content.category.name,
-        },
+        category_id: content.category_id,
         type: content.type,
         file_size_bytes: content.file_size_bytes,
         status: content.status,
@@ -299,90 +297,4 @@ export const getContentsBycategoryid = async (req, res) => {
   }
 };
 
-
-
-// popular content by category ID
-export const popularContentByCategoryId = async (req, res) => {
-  const { category_id } = req.params;
-
-  try {
-    // Step 1: Fetch the category details using the category_id
-    const category = await prisma.category.findUnique({
-      where: {
-        id: category_id, // Get category by category_id
-      },
-    });
-
-    // Step 2: Check if the category exists
-    if (!category) {
-      return res.status(404).json({ message: `Category not found with id ${category_id}` });
-    }
-
-    // Step 3: Fetch contents related to the category
-    const contents = await prisma.content.findMany({
-      where: {
-        category_id: category_id, // Get contents related to the category
-        content_status: "published", // Only published content
-      },
-      include: {
-        Rating: true, // Include ratings to calculate average rating
-      },
-    });
-
-    if (!contents || contents.length === 0) {
-      return res.status(404).json({ message: `No content found for category ID ${category_id}` });
-    }
-
-    // Step 4: Calculate the average rating for each content
-    const formattedContents = contents.map((content) => {
-      // Calculate average rating
-      const averageRating =
-        content.Rating.length > 0
-          ? content.Rating.reduce((acc, rating) => acc + rating.rating, 0) / content.Rating.length
-          : 0; // Default to 0 if no ratings exist
-
-      const videoUrl =
-        buildS3Url(content.s3_bucket, content.s3_key) || buildLocalUrl(content.video);
-      const thumbnailUrl =
-        buildS3Url(content.s3_bucket, content.s3_thumb_key) || buildLocalUrl(content.thumbnail);
-
-      return {
-        id: content.id,
-        title: content.title,
-        genre: content.genre,
-        category: {
-          id: category.id,
-          name: category.name,
-          slug: category.slug,
-        },
-        type: content.type,
-        file_size_bytes: content.file_size_bytes,
-        status: content.status,
-        content_status: content.content_status,
-        created_at: content.created_at,
-        video: videoUrl,
-        thumbnail: thumbnailUrl,
-        average_rating: averageRating, // Include calculated average rating
-      };
-    });
-
-    // Step 5: Sort contents based on average rating (highest rating first)
-    const sortedContents = formattedContents.sort((a, b) => b.average_rating - a.average_rating);
-
-    // Step 6: Return the sorted contents with category info
-    res.json({
-      category: {
-        id: category.id,
-        name: category.name,
-        slug: category.slug,
-      },
-      contents: sortedContents,
-    });
-  } catch (error) {
-    console.error("Error fetching popular content by category ID:", error);
-    res.status(500).json({
-      error: "Failed to fetch popular content by category ID",
-    });
-  }
-};
 
