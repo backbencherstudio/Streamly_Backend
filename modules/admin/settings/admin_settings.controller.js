@@ -1,4 +1,6 @@
 import { PrismaClient } from "@prisma/client";
+import { emailDeactivateUser } from "../../../constants/email_message.js";
+import { sendEmail } from "../../../utils/mailService.js";
 
 const prisma = new PrismaClient();
 
@@ -25,8 +27,8 @@ export const deactivateAccount = async (req, res) => {
       deactivationEndDate.getDate() + deactivationPeriod
     );
 
-    // Update the user with deactivation status, deactivation start and end dates
-    await prisma.user.update({
+    // Update the user with deactivation status, deactivation start, and end dates
+    const user = await prisma.user.update({
       where: { id: userId },
       data: {
         status: "deactivated", // Set status to 'deactivated'
@@ -35,8 +37,16 @@ export const deactivateAccount = async (req, res) => {
       },
     });
 
+    // Send deactivation email to the user
+    const emailContent = emailDeactivateUser(user.email, deactivationPeriod);
+    await sendEmail(
+      user.email,
+      "Account Deactivation Notification",
+      emailContent
+    );
+
     res.json({
-      message: `Account deactivated successfully for ${deactivationPeriod} days`,
+      message: `Account deactivated successfully for ${deactivationPeriod} days.`,
     });
   } catch (error) {
     console.error("Error deactivating account:", error);
