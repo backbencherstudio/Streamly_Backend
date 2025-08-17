@@ -50,6 +50,23 @@ export const deactivateAccount = async (req, res) => {
   }
 };
 
+export const activateUser = async (req, res) => {
+  const { userId } = req.params;
+
+  try {
+    // Update the user status to 'active'
+    await prisma.user.update({
+      where: { id: userId },
+      data: { status: "active" },
+    });
+
+    res.json({ message: "User account activated successfully" });
+  } catch (error) {
+    console.error("Error activating account:", error);
+    res.status(500).json({ error: "Failed to activate account" });
+  }
+};
+
 export const deleteAccount = async (req, res) => {
   const { userId } = req.params;
 
