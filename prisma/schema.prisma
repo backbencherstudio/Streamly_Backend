@@ -140,7 +140,7 @@ model UserSetting {
 model PaymentTransaction {
   id         String    @id @default(cuid())
   created_at DateTime  @default(now())
-  updated_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
   deleted_at DateTime?
   status     String?   @default("pending")
 

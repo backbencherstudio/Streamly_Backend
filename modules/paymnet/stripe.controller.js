@@ -1,7 +1,6 @@
-import jwt from 'jsonwebtoken';
 import Stripe from 'stripe';
 import { PrismaClient } from "@prisma/client";
-import cron from 'node-cron';
+
 
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -10,6 +9,7 @@ const prisma = new PrismaClient();
 export const createPaymentIntent = async (req, res) => {
   try {
     const { paymentMethodId, currency, service_id } = req.body;
+
     if (!paymentMethodId || !currency || !service_id) {
       return res.status(400).json({ error: 'Missing payment method, currency, or service ID' });
     }
@@ -25,6 +25,18 @@ export const createPaymentIntent = async (req, res) => {
     const { email, role, userId } = req.user || {};
     console.log('User Info:', { email, role, userId });
 
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is missing or invalid' });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
     const transaction = await prisma.$transaction(async (prismaTx) => {
       try {
         const paymentIntent = await stripe.paymentIntents.create({
@@ -32,20 +44,20 @@ export const createPaymentIntent = async (req, res) => {
           currency,
           payment_method: paymentMethodId,
           metadata: {
-            user_id: "cme6lsmz80000reqgl7j0lmqz",
+            user_id: userId,
             user_email: email,
             user_role: role,
-            service_id : 'cme6oh92o0000rey4iq2uy1au',
+            service_id: service_id,
             plan: service.plan || 'basic',
           }
         });
 
         const paymentTransaction = await prismaTx.paymentTransaction.create({
           data: {
-            user: { connect: { id: userId } },
+            user_id: userId,
             price: paymentIntent.amount,
             currency: paymentIntent.currency,
-            status: "pending",
+            status: 'pending',
             payment_method: paymentIntent.payment_method,
           },
         });
@@ -69,6 +81,8 @@ export const createPaymentIntent = async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
 };
+
+
 //webhook handler
 export const handleWebhook = async (req, res) => {
   const sig = req.headers['stripe-signature'];
@@ -111,16 +125,16 @@ const handlePaymentIntentSucceeded = async (paymentIntent) => {
   console.log(`Processing payment intent for user ${user_id} with service ${service_id} and plan ${plan}`);
   
 
-  // if (!user_id) {
-  //   console.error('User ID not found in payment intent metadata.');
-  //   return;
-  // }
+  if (!user_id) {
+    console.error('User ID not found in payment intent metadata.');
+    return;
+  }
 
   const transaction = await prisma.$transaction(async (prismaTx) => {
     try {
       // 1. Update user 
       const userUpdate = await prismaTx.user.update({
-        where: { id: 'cme6lsmz80000reqgl7j0lmqz' },
+        where: { id: paymentIntent.metadata.user_id },
         select: { name: true },
         data: {
           role: "premium",
@@ -132,7 +146,7 @@ const handlePaymentIntentSucceeded = async (paymentIntent) => {
 
 
       const service = await prismaTx.services.findUnique({
-        where: { id: 'cme43ky160000rebkdbrnsr71' },
+        where: { id: paymentIntent.metadata.service_id },
       });
 
       if (!service) {
@@ -155,17 +169,21 @@ const handlePaymentIntentSucceeded = async (paymentIntent) => {
         },
       });
 
-      // console.log(`Subscription created for user ${user_id} with plan ${plan}.`);
+      console.log(`Subscription created for user ${user_id} with plan ${plan}.`);
 
-      // const paymentTransaction = await prismaTx.paymentTransaction.update({
-      //   where: { id: paymentIntent.id },
-      //   data: {
-      //     status: "succeeded",
-      //     subscription: { connect: { id: subscription.id } },
-      //   },
-      // });
+      // 2. Update payment transaction
+      if (!paymentIntent.id) {
+        console.log('Payment Intent ID is missing.');
+      }
+      const paymentTransaction = await prismaTx.paymentTransaction.update({
+        where: { id: paymentIntent.id },
+        data: {
+          status: "succeeded",
+          subscription: { connect: { id: subscription.id } },
+        },
+      });
 
-      // console.log(`Payment transaction updated for user ${user_id}:`, paymentTransaction);
+      console.log(`Payment transaction updated for user ${user_id}:`, paymentTransaction);
 
       return 'Payment Intent Success';
     } catch (error) {
@@ -258,7 +276,6 @@ export const getAllSubscriptions = async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch subscriptions' });
   }
 };
-//Navbar
 //Total Subscribers
 export const getTotalSubscribers = async (req, res) => {
   try {

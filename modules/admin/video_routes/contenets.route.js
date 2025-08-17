@@ -79,7 +79,6 @@ r.get("/allContents", verifyUser("admin"), async (req, res) => {
   }
 });
 
-// Route to get content by ID
 r.get("/:id", verifyUser("admin"), async (req, res) => {
   const { id } = req.params;
   try {
@@ -136,10 +135,9 @@ r.get("/getoneWithcat/:id", async (req, res) => {
   const { id } = req.params;
 
   try {
-    // Use findMany instead of findUnique to retrieve multiple contents
     const contents = await prisma.content.findMany({
       where: {
-        category_id: id, // category_id is not unique, so use findMany
+        category_id: id,
       },
     });
 
@@ -149,7 +147,6 @@ r.get("/getoneWithcat/:id", async (req, res) => {
         .json({ message: `No content found for category ID ${id}` });
     }
 
-    // Map through the contents and format them
     const formattedContents = contents.map((content) => {
       const videoUrl =
         buildS3Url(content.s3_bucket, content.s3_key) ||
@@ -182,49 +179,45 @@ r.get("/getoneWithcat/:id", async (req, res) => {
   }
 });
 
-// Get popular category contents with exact ratings, sorted by highest to lowest rating
+
+//--------------------getting popular contents by category-------------------
 r.get("/getPopularContents/:categoryId", async (req, res) => {
   const { categoryId } = req.params;
 
   try {
-    // Step 1: Get all ratings for the content in the specified category
     const ratings = await prisma.rating.findMany({
       where: {
         content: {
-          category_id: categoryId, // Filter ratings by category_id
+          category_id: categoryId,
         },
       },
       select: {
-        content_id: true, // Only fetch content_id and rating
+        content_id: true,
         rating: true,
       },
       orderBy: {
-        rating: "desc", // Sort by rating in descending order (highest first)
+        rating: "desc",
       },
     });
 
-    // If no ratings are found for the given category, return a 404 response
     if (ratings.length === 0) {
       return res
         .status(404)
         .json({ message: `No content found for category ID ${categoryId}` });
     }
 
-    // Step 2: Fetch content details based on the ratings we obtained
-    const contentIds = ratings.map((rating) => rating.content_id); // Extract content_ids from ratings
+    const contentIds = ratings.map((rating) => rating.content_id);
 
-    // Fetch the content details for the given content_ids
     const contents = await prisma.content.findMany({
       where: {
-        id: { in: contentIds }, // Get content details for the content_ids
+        id: { in: contentIds }, 
       },
     });
 
-    // Step 3: Map through the content and attach the exact rating to each content
     const formattedContents = contents.map((content) => {
       const rating = ratings.find(
         (rating) => rating.content_id === content.id
-      ).rating; // Get the exact rating for the content
+      ).rating; 
 
       const videoUrl =
         buildS3Url(content.s3_bucket, content.s3_key) ||
@@ -233,7 +226,6 @@ r.get("/getPopularContents/:categoryId", async (req, res) => {
         buildS3Url(content.s3_bucket, content.s3_thumb_key) ||
         buildLocalUrl(content.thumbnail);
 
-      // Clean up the content object by removing unnecessary fields
       delete content.s3_bucket;
       delete content.s3_key;
       delete content.s3_thumb_key;
@@ -245,19 +237,17 @@ r.get("/getPopularContents/:categoryId", async (req, res) => {
       delete content.content_type;
 
       return {
-        ...serialize(content), // Serialize the content object
+        ...serialize(content), 
         video: videoUrl,
-        thumbnail: thumbnailUrl || null, // Ensure thumbnail is null if not available
-        rating, // Attach the exact rating to the content
+        thumbnail: thumbnailUrl || null,
+        rating, 
       };
     });
 
-    // Step 4: Sort the formatted contents based on rating in descending order
     const sortedContents = formattedContents.sort(
       (a, b) => b.rating - a.rating
     );
 
-    // Return the formatted contents sorted by exact rating (highest first)
     res.json({ contents: sortedContents });
   } catch (error) {
     console.error("Error fetching content by category and rating:", error);

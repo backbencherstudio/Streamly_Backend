@@ -1,14 +1,20 @@
 import { PrismaClient } from "@prisma/client";
-import { emailDeactivateUser } from "../../../constants/email_message.js";
+import { emailReactivateUser } from "../../../constants/email_message.js";
 import { sendEmail } from "../../../utils/mailService.js";
-
+import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
-export const deactivateAccount = async (req, res) => {
-  const { userId } = req.params;
-  const { deactivationPeriod } = req.body; // Period in days: 3, 7, 30, 365
 
-  // Valid periods in days
+
+
+
+//---------------------deactivate user account-------------------
+export const deactivateAccount = async (req, res) => {
+  const id = req.user?.userId;
+  console.log("userId:", id);
+
+  const { deactivationPeriod } = req.body;
+
   const validPeriods = [3, 7, 30, 365];
 
   if (!validPeriods.includes(deactivationPeriod)) {
@@ -18,23 +24,24 @@ export const deactivateAccount = async (req, res) => {
   }
 
   try {
-    // Get current date
     const deactivationStartDate = new Date();
 
-    // Calculate deactivation end date
     const deactivationEndDate = new Date(deactivationStartDate);
     deactivationEndDate.setDate(
       deactivationEndDate.getDate() + deactivationPeriod
     );
 
-    // Update the user with deactivation status, deactivation start, and end dates
     const user = await prisma.user.update({
-      where: { id: userId },
+      where: { id: id },
       data: {
-        status: "deactivated", // Set status to 'deactivated'
-        deactivation_start_date: deactivationStartDate, // Store the current date as deactivation start date
-        deactivation_end_date: deactivationEndDate, // Store the calculated deactivation end date
+        status: "deactivated",
+        deactivation_start_date: deactivationStartDate,
+        deactivation_end_date: deactivationEndDate,
       },
+    });
+
+    res.json({
+      message: `Account deactivated successfully for ${deactivationPeriod} days.`,
     });
 
     // Send deactivation email to the user
@@ -45,32 +52,69 @@ export const deactivateAccount = async (req, res) => {
       emailContent
     );
 
-    res.json({
-      message: `Account deactivated successfully for ${deactivationPeriod} days.`,
-    });
+
   } catch (error) {
     console.error("Error deactivating account:", error);
     res.status(500).json({ error: "Failed to deactivate account" });
   }
 };
 
+//---------------------activate user account-------------------
 export const activateUser = async (req, res) => {
-  const { userId } = req.params;
+  const { email, password } = req.body;
 
   try {
-    // Update the user status to 'active'
+
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password are required" });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email: email },
+    });
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    //check users password 
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ message: "Invalid password" });
+    }
+
+    
+
+    // updating the user
     await prisma.user.update({
-      where: { id: userId },
-      data: { status: "active" },
+      where: { id: user.id },
+      data: {
+        status: "active",
+        deactivation_start_date: null,
+        deactivation_end_date: null,
+      },
     });
 
+
+
     res.json({ message: "User account activated successfully" });
+
+
+    // sending email to user
+
+    const emailContent = emailReactivateUser(user.email, deactivationPeriod);
+    await sendEmail(
+      user.email,
+      "Account Deactivation Notification",
+      emailContent
+    );
+
   } catch (error) {
     console.error("Error activating account:", error);
     res.status(500).json({ error: "Failed to activate account" });
   }
 };
 
+//--------------------delete account permanently-------------------
 export const deleteAccount = async (req, res) => {
   const { userId } = req.params;
 
