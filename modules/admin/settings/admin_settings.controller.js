@@ -1,8 +1,8 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "@prisma/client"; 
 import { emailReactivateUser } from "../../../constants/email_message.js";
 import { sendEmail } from "../../../utils/mailService.js";
 import bcrypt from "bcryptjs";
-const prisma = new PrismaClient();
+const prisma = new PrismaClient();          
 
 
 

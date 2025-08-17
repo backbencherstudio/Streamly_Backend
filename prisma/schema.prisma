@@ -499,8 +499,8 @@ model Order {
 
 
 enum HelpSupportStatus {
-  Solved
-  Unsolved
+  Open
+  Resolved
 }
 model HelpSupport {
   id         String    @id @default(cuid())
@@ -511,10 +511,10 @@ model HelpSupport {
   user_id String?
   user    User?   @relation(fields: [user_id], references: [id])
 
-  issue_type String?
+  subject String?
   description String? @db.Text
 
-  status HelpSupportStatus @default(Unsolved)
+  status HelpSupportStatus @default(Open)
 
   @@map("help_and_support")
 }
