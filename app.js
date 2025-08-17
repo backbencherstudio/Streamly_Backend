@@ -14,6 +14,7 @@ import ratingRoutes from "./modules/rating/rating.route.js";
 import contentsRoute from "./modules/admin/video_routes/contenets.route.js";
 import favouriteRoutes from "./modules/Favourite/favourite.route.js";
 import adminSettingsRoutes from "./modules/admin/settings/admin_settigns.route.js";
+import supportRoutes from './modules/helpSupport/support.route.js'; 
 //Import Swagger spec and UI
 import { swaggerSpec } from "./swagger/index.js";
 import swaggerUi from "swagger-ui-express";
@@ -239,6 +240,7 @@ app.use("/api/admin/user", usermanagementRoutes);
 app.use("/api/admin/settings", adminSettingsRoutes);
 app.use("/api/ratings", ratingRoutes);
 app.use("/api/favourites", favouriteRoutes);
+app.use("/api/support", supportRoutes);
 
 //Resolve __dirname for ESM
 const __filename = fileURLToPath(import.meta.url);
