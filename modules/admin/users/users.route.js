@@ -9,7 +9,6 @@ import {
 } from "./users.controller.js";
 import { verifyUser } from "../../../middlewares/verifyUsers.js";
 
-const prisma = new PrismaClient();
 const router = express.Router();
 
 router.get("/allusers", verifyUser("admin"), getAllUsers);

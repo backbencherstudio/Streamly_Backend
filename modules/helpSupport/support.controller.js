@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { sendSuccessfullyPostedTokenEmail } from "../../utils/mailService.js";
 
 const prisma = new PrismaClient();
 
@@ -6,7 +7,6 @@ const prisma = new PrismaClient();
 export const createSupportTicket = async (req, res) => {
   try {
     const user = req.user;
-
     const { subject, description } = req.body;
 
     if (!subject || !description) {
@@ -21,11 +21,15 @@ export const createSupportTicket = async (req, res) => {
       },
     });
 
+    const token = newTicket.id;  
+    await sendSuccessfullyPostedTokenEmail(user?.email, token);
+
     return res.status(201).json({
       success: true,
       message: "Support ticket created successfully",
       ticket: newTicket,
     });
+    
   } catch (error) {
     console.error("Error in createSupportTicket:", error);
     return res.status(500).json({ message: "Internal Server Error" });
@@ -51,16 +55,40 @@ export const solveTicket = async (req, res) => {
   try {
     const { ticketId } = req.params;
 
-    const updatedTicket = await prisma.helpSupport.update({
+    const ticket = await prisma.helpSupport.findUnique({
       where: { id: ticketId },
-      data: { status: "Resolved" },
     });
+    if (!ticket) {
+      return res.status(404).json({ message: "Ticket not found" });
+    }
 
-    return res.status(200).json({
-      success: true,
-      message: "Ticket resolved successfully",
-      ticket: updatedTicket,
-    });
+    if (ticket.status === "Resolved") {
+
+      const result = await prisma.helpSupport.update({
+        where: { id: ticketId },
+        data: { status: "Open" },
+      });
+      return res.status(200).json({
+        success: true,
+        message: "Ticket opened successfully",
+        ticket: result.status,
+      });
+
+    } else {
+      const result = await prisma.helpSupport.update({
+        where: { id: ticketId },
+        data: { status: "Resolved" },
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "Ticket resolved successfully",
+        ticket: result.status,
+      });
+    }
+
+
+
   } catch (error) {
     console.error("Error in solveTicket:", error);
     return res.status(500).json({ message: "Internal Server Error" });

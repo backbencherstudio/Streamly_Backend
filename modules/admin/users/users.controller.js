@@ -58,49 +58,17 @@ export const deleteUser = async (req, res) => {
   }
 };
 
-// export const suspendUser = async (req, res) => {
-//   const { id } = req.params;
-
-//   const { suspend_endTime } = req.body;
-//   try {
-//     const user = await prisma.user.update({
-//       where: { id: id },
-//       data: { status: "suspended", suspend_endTime: suspend_endTime },
-//     });
-//     res.json(user);
-//   } catch (err) {
-//     res.status(500).json({ error: "Failed to suspend user" });
-//     console.log("Error suspending user:", err);
-//   }
-// };
-
-// export const unsuspendUser = async (req, res) => {
-//   const { id } = req.params;
-//   try {
-//     const user = await prisma.user.update({
-//       where: { id: id },
-//       data: { status: "active", suspend_endTime: null },
-//     });
-//     res.json(user);
-//   } catch (err) {
-//     res.status(500).json({ error: "Failed to unsuspend user" });
-//     console.log("Error unsuspending user:", err);
-//   }
-// };
 
 export const suspendUser = async (req, res) => {
   const { id } = req.params;
-  const { suspend_endTime } = req.body; // The end time for suspension
-
+  const { suspend_endTime } = req.body; 
   try {
     const user = await prisma.user.update({
       where: { id: id },
       data: { status: "suspended", suspend_endTime: suspend_endTime },
     });
 
-    // Send suspension email to the user
     const emailContent = emailSuspendUser(user.email, suspend_endTime);
-    // Use a mailing service like nodemailer to send the email
     await sendEmail(user.email, "Account Suspended", emailContent);
 
     res.json(user);
