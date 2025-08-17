@@ -1,5 +1,5 @@
 import { PrismaClient } from "@prisma/client";
-import { emailDeactivateUser } from "../../../constants/email_message.js";
+import { emailReactivateUser } from "../../../constants/email_message.js";
 import { sendEmail } from "../../../utils/mailService.js";
 import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
@@ -101,7 +101,7 @@ export const activateUser = async (req, res) => {
 
     // sending email to user
 
-    const emailContent = emailDeactivateUser(user.email, deactivationPeriod);
+    const emailContent = emailReactivateUser(user.email, deactivationPeriod);
     await sendEmail(
       user.email,
       "Account Deactivation Notification",
