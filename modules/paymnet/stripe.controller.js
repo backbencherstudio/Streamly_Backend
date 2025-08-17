@@ -1,7 +1,6 @@
-import jwt from 'jsonwebtoken';
 import Stripe from 'stripe';
 import { PrismaClient } from "@prisma/client";
-import cron from 'node-cron';
+
 
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
