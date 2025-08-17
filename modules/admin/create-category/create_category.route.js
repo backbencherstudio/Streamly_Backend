@@ -11,7 +11,7 @@ import {
   deleteCategory,
   getAllGenres,
   getContentsByGenre,
-  getContentsBycategoryid,
+  getCategoryById,
 } from "./create_category.controller.js";
 import { get } from "http";
 import { verifyAdmin } from "../../../middlewares/verifyAdmin.js";
@@ -22,6 +22,7 @@ const router = express.Router();
 // Category CRUD
 router.post("/create_category", verifyAdmin, createCategory);
 router.get("/categories", getCategories);
+router.get("/categories/:id", verifyAdmin, getCategoryById);
 router.put("/categories/:id", verifyAdmin, updateCategory);
 router.delete("/categories/:id", verifyAdmin, deleteCategory);
 
@@ -29,9 +30,8 @@ router.delete("/categories/:id", verifyAdmin, deleteCategory);
 router.post("/create_service", createService);
 router.get("/services", getAllServices);
 
-
 router.get("/getAllGenres", getAllGenres);
 router.get("/getContentsByGenre/:genre", getContentsByGenre);
-router.get("/getContentsByCategoryID/:id", getContentsBycategoryid);
+
 
 export default router;
