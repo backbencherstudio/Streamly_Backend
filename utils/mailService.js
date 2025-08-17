@@ -89,3 +89,23 @@ export const sendaccountDeactivationEmail = async (email) => {
   
   await sendEmail(email, "Account Deactivation Notification", htmlContent);
 }
+
+export const sendSuccessfullyPostedTokenEmail = async (email, token) => {
+  const { MAIL_FROM_NAME, MAIL_FROM_ADDRESS } = process.env;
+
+  if (!MAIL_FROM_NAME || !MAIL_FROM_ADDRESS) {
+    console.error("Missing required environment variables for email configuration.");
+    return;
+  }
+
+  const htmlContent = `<p>Dear User,</p>
+                       <p>Your ticket with ID <strong>${token}</strong> has been successfully posted.</p>
+                       <p>Best regards,</p>
+                       <p>${MAIL_FROM_NAME}</p>`;
+
+  try {
+    await sendEmail(email, "Ticket Posted Successfully", htmlContent);
+  } catch (error) {
+    console.error("Error sending email:", error);
+  }
+};
