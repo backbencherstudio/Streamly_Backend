@@ -6,9 +6,8 @@ const prisma = new PrismaClient();
 
 export const deactivateAccount = async (req, res) => {
   const { userId } = req.params;
-  const { deactivationPeriod } = req.body; // Period in days: 3, 7, 30, 365
+  const { deactivationPeriod } = req.body;
 
-  // Valid periods in days
   const validPeriods = [3, 7, 30, 365];
 
   if (!validPeriods.includes(deactivationPeriod)) {
@@ -18,22 +17,19 @@ export const deactivateAccount = async (req, res) => {
   }
 
   try {
-    // Get current date
     const deactivationStartDate = new Date();
 
-    // Calculate deactivation end date
     const deactivationEndDate = new Date(deactivationStartDate);
     deactivationEndDate.setDate(
       deactivationEndDate.getDate() + deactivationPeriod
     );
 
-    // Update the user with deactivation status, deactivation start, and end dates
     const user = await prisma.user.update({
       where: { id: userId },
       data: {
-        status: "deactivated", // Set status to 'deactivated'
-        deactivation_start_date: deactivationStartDate, // Store the current date as deactivation start date
-        deactivation_end_date: deactivationEndDate, // Store the calculated deactivation end date
+        status: "deactivated", 
+        deactivation_start_date: deactivationStartDate,
+        deactivation_end_date: deactivationEndDate,
       },
     });
 
