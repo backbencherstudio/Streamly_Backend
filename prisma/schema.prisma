@@ -85,6 +85,7 @@ model User {
   @@map("users ")
   Rating Rating[]
   Favourite Favourite[]
+  HelpSupport HelpSupport[]
 }
 
 model UserPaymentMethod {
@@ -494,4 +495,26 @@ model Order {
   payment_status paymentStatus @default(pending)
 
   @@map("orders")
+}
+
+
+enum HelpSupportStatus {
+  Solved
+  Unsolved
+}
+model HelpSupport {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  user_id String?
+  user    User?   @relation(fields: [user_id], references: [id])
+
+  issue_type String?
+  description String? @db.Text
+
+  status HelpSupportStatus @default(Unsolved)
+
+  @@map("help_and_support")
 }
