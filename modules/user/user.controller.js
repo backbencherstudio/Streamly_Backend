@@ -93,17 +93,23 @@ export const loginUser = async (req, res) => {
 
     if (user.status === "deactivated") {
       return res.status(403).json({
-        message: "Your account is deactivated. Please activate your account.",
+        message: "Your account is deactivated. Please activate your account to log in.",
       });
     }
 
-    if (user.type == "ADMIN") {
+    if(user.status === "suspended") {
+      return res.status(403).json({
+        message: "Your account is suspended. Please contact support for assistance.",
+      });
+    }
+
+    if (user.type == "admin") {
       return res.status(403).json({
         message: "ADMIN YOU MUST LOG IN FROM ADMIN PANEL",
       });
     }
 
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+    const isPasswordValid =  bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       return res.status(401).json({ message: "Invalid password" });
     }
@@ -129,8 +135,9 @@ export const loginUser = async (req, res) => {
         id: user.id,
         name: user.name,
         email: user.email,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt,
+        createdAt: user.created_at,
+        updatedAt: user.updated_at,
+        role: user.role,
       },
       token,
     });
