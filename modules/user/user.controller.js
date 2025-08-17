@@ -91,6 +91,12 @@ export const loginUser = async (req, res) => {
       });
     }
 
+    if (user.status === "deactivated") {
+      return res.status(403).json({
+        message: "Your account is deactivated. Please activate your account.",
+      });
+    }
+
     if (user.type == "ADMIN") {
       return res.status(403).json({
         message: "ADMIN YOU MUST LOG IN FROM ADMIN PANEL",
@@ -109,6 +115,12 @@ export const loginUser = async (req, res) => {
     );
 
     console.log("Token expires at:", token);
+
+    if (user.status === "deactivated") {
+      return res.status(403).json({
+        message: "Your account is deactivated. Please activate your account.",
+      });
+    }
 
     return res.status(200).json({
       success: true,
@@ -413,8 +425,6 @@ export const updateUserDetails = async (req, res) => {
     if (!id) {
       return res.status(400).json({ message: "User not authenticated" });
     }
-
-
 
     const user = await prisma.user.update({
       where: { id: id },
