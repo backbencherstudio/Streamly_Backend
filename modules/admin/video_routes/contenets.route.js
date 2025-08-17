@@ -25,7 +25,7 @@ const buildLocalUrl = (file) => {
   return file ? `${PUBLIC_BASE_URL}/uploads/${file}` : null;
 };
 // Route to get all contents
-r.get('/allContents',verifyUser("admin"), async (req, res) => {
+r.get("/allContents", verifyUser("admin"), async (req, res) => {
   try {
     const rows = await prisma.content.findMany({
       orderBy: { created_at: "desc" },
@@ -35,7 +35,7 @@ r.get('/allContents',verifyUser("admin"), async (req, res) => {
         genre: true,
         category: {
           select: {
-           id: true,
+            id: true,
             name: true,
           },
         },
@@ -54,8 +54,11 @@ r.get('/allContents',verifyUser("admin"), async (req, res) => {
     });
 
     const serializedRows = rows.map((row) => {
-      const video = buildS3Url(row.s3_bucket, row.s3_key) || buildLocalUrl(row.video);
-      const thumbnailUrl = buildS3Url(row.s3_bucket, row.s3_thumb_key) || buildLocalUrl(row.thumbnail);
+      const video =
+        buildS3Url(row.s3_bucket, row.s3_key) || buildLocalUrl(row.video);
+      const thumbnailUrl =
+        buildS3Url(row.s3_bucket, row.s3_thumb_key) ||
+        buildLocalUrl(row.thumbnail);
       const thumbnail = thumbnailUrl ? thumbnailUrl : null;
 
       delete row.s3_bucket;
@@ -77,11 +80,11 @@ r.get('/allContents',verifyUser("admin"), async (req, res) => {
 });
 
 // Route to get content by ID
-r.get('/:id', verifyUser("admin"), async (req, res) => {
-  const { id } = req.params; 
+r.get("/:id", verifyUser("admin"), async (req, res) => {
+  const { id } = req.params;
   try {
     const row = await prisma.content.findUnique({
-      where: { id: id },  
+      where: { id: id },
       select: {
         id: true,
         title: true,
@@ -101,11 +104,16 @@ r.get('/:id', verifyUser("admin"), async (req, res) => {
     });
 
     if (!row) {
-      return res.status(404).json({ error: 'Content not exist or maybe deleted' });
+      return res
+        .status(404)
+        .json({ error: "Content not exist or maybe deleted" });
     }
 
-    const video = buildS3Url(row.s3_bucket, row.s3_key) || buildLocalUrl(row.video);
-    const thumbnailUrl = buildS3Url(row.s3_bucket, row.s3_thumb_key) || buildLocalUrl(row.thumbnail);
+    const video =
+      buildS3Url(row.s3_bucket, row.s3_key) || buildLocalUrl(row.video);
+    const thumbnailUrl =
+      buildS3Url(row.s3_bucket, row.s3_thumb_key) ||
+      buildLocalUrl(row.thumbnail);
     const thumbnail = thumbnailUrl ? thumbnailUrl : null;
 
     delete row.s3_bucket;
@@ -119,8 +127,8 @@ r.get('/:id', verifyUser("admin"), async (req, res) => {
       thumbnail,
     });
   } catch (error) {
-    console.log('Error fetching content:', error);
-    res.status(500).json({ error: 'Failed to fetch content' });
+    console.log("Error fetching content:", error);
+    res.status(500).json({ error: "Failed to fetch content" });
   }
 });
 
@@ -131,19 +139,25 @@ r.get("/getoneWithcat/:id", async (req, res) => {
     // Use findMany instead of findUnique to retrieve multiple contents
     const contents = await prisma.content.findMany({
       where: {
-        category_id: id,  // category_id is not unique, so use findMany
+        category_id: id, // category_id is not unique, so use findMany
       },
     });
 
     if (contents.length === 0) {
-      return res.status(404).json({ message: `No content found for category ID ${id}` });
+      return res
+        .status(404)
+        .json({ message: `No content found for category ID ${id}` });
     }
 
     // Map through the contents and format them
     const formattedContents = contents.map((content) => {
-      const videoUrl = buildS3Url(content.s3_bucket, content.s3_key) || buildLocalUrl(content.video);
-      const thumbnailUrl = buildS3Url(content.s3_bucket, content.s3_thumb_key) || buildLocalUrl(content.thumbnail);
- 
+      const videoUrl =
+        buildS3Url(content.s3_bucket, content.s3_key) ||
+        buildLocalUrl(content.video);
+      const thumbnailUrl =
+        buildS3Url(content.s3_bucket, content.s3_thumb_key) ||
+        buildLocalUrl(content.thumbnail);
+
       delete content.s3_bucket;
       delete content.s3_key;
       delete content.s3_thumb_key;
@@ -163,11 +177,94 @@ r.get("/getoneWithcat/:id", async (req, res) => {
 
     res.json({ contents: formattedContents });
   } catch (error) {
-    console.error('Error fetching content by category ID:', error);
-    res.status(500).json({ error: 'Failed to fetch content by category ID' });
+    console.error("Error fetching content by category ID:", error);
+    res.status(500).json({ error: "Failed to fetch content by category ID" });
   }
 });
 
+// Get popular category contents with exact ratings, sorted by highest to lowest rating
+r.get("/getPopularContents/:categoryId", async (req, res) => {
+  const { categoryId } = req.params;
 
+  try {
+    // Step 1: Get all ratings for the content in the specified category
+    const ratings = await prisma.rating.findMany({
+      where: {
+        content: {
+          category_id: categoryId, // Filter ratings by category_id
+        },
+      },
+      select: {
+        content_id: true, // Only fetch content_id and rating
+        rating: true,
+      },
+      orderBy: {
+        rating: "desc", // Sort by rating in descending order (highest first)
+      },
+    });
+
+    // If no ratings are found for the given category, return a 404 response
+    if (ratings.length === 0) {
+      return res
+        .status(404)
+        .json({ message: `No content found for category ID ${categoryId}` });
+    }
+
+    // Step 2: Fetch content details based on the ratings we obtained
+    const contentIds = ratings.map((rating) => rating.content_id); // Extract content_ids from ratings
+
+    // Fetch the content details for the given content_ids
+    const contents = await prisma.content.findMany({
+      where: {
+        id: { in: contentIds }, // Get content details for the content_ids
+      },
+    });
+
+    // Step 3: Map through the content and attach the exact rating to each content
+    const formattedContents = contents.map((content) => {
+      const rating = ratings.find(
+        (rating) => rating.content_id === content.id
+      ).rating; // Get the exact rating for the content
+
+      const videoUrl =
+        buildS3Url(content.s3_bucket, content.s3_key) ||
+        buildLocalUrl(content.video);
+      const thumbnailUrl =
+        buildS3Url(content.s3_bucket, content.s3_thumb_key) ||
+        buildLocalUrl(content.thumbnail);
+
+      // Clean up the content object by removing unnecessary fields
+      delete content.s3_bucket;
+      delete content.s3_key;
+      delete content.s3_thumb_key;
+      delete content.video;
+      delete content.duration;
+      delete content.storage_provider;
+      delete content.original_name;
+      delete content.checksum_sha256;
+      delete content.content_type;
+
+      return {
+        ...serialize(content), // Serialize the content object
+        video: videoUrl,
+        thumbnail: thumbnailUrl || null, // Ensure thumbnail is null if not available
+        rating, // Attach the exact rating to the content
+      };
+    });
+
+    // Step 4: Sort the formatted contents based on rating in descending order
+    const sortedContents = formattedContents.sort(
+      (a, b) => b.rating - a.rating
+    );
+
+    // Return the formatted contents sorted by exact rating (highest first)
+    res.json({ contents: sortedContents });
+  } catch (error) {
+    console.error("Error fetching content by category and rating:", error);
+    res
+      .status(500)
+      .json({ error: "Failed to fetch content by category and rating" });
+  }
+});
 
 export default r;

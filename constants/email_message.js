@@ -1,5 +1,5 @@
 export const emailForgotPasswordOTP = (email, OTP) => {
-    return `
+  return `
       <!DOCTYPE html>
       <html>
       <head>
@@ -130,9 +130,9 @@ export const emailForgotPasswordOTP = (email, OTP) => {
       </body>
       </html>
     `;
-  };
-  export const emailRegisterUserOTP = (email, OTP) => {
-    return `
+};
+export const emailRegisterUserOTP = (email, OTP) => {
+  return `
       <!DOCTYPE html>
       <html>
       <head>
@@ -263,9 +263,9 @@ export const emailForgotPasswordOTP = (email, OTP) => {
       </body>
       </html>
     `;
-  };
-  export const sendAdminInvitationEmails = (email, password) => {
-    return `
+};
+export const sendAdminInvitationEmails = (email, password) => {
+  return `
       <!DOCTYPE html>
       <html>
       <head>
@@ -409,9 +409,9 @@ export const emailForgotPasswordOTP = (email, OTP) => {
       </body>
       </html>
     `;
-  };
-  export const receiveEmailTemplate = (email, subject, message) => {
-    return `
+};
+export const receiveEmailTemplate = (email, subject, message) => {
+  return `
       <!DOCTYPE html>
       <html>
       <head>
@@ -455,7 +455,9 @@ export const emailForgotPasswordOTP = (email, OTP) => {
                       <tr>
                         <td style="padding-bottom: 15px;">
                           <strong style="color: #2c3e50; display: inline-block; width: 80px;">Subject:</strong>
-                          <span style="color: #2c3e50;">${subject || 'No subject provided'}</span>
+                          <span style="color: #2c3e50;">${
+                            subject || "No subject provided"
+                          }</span>
                         </td>
                       </tr>
                       <tr>
@@ -510,9 +512,9 @@ export const emailForgotPasswordOTP = (email, OTP) => {
       </body>
       </html>
     `;
-  };
-  export const generateUserListHtml = (users) => {
-    return `
+};
+export const generateUserListHtml = (users) => {
+  return `
       <!DOCTYPE html>
       <html lang="en">
       <head>
@@ -623,13 +625,13 @@ export const emailForgotPasswordOTP = (email, OTP) => {
             <p>All registered users in the system</p>
           </div>
           <div class="report-meta">
-            Generated: ${new Date().toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })}
+            Generated: ${new Date().toLocaleString("en-US", {
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
           </div>
         </div>
         
@@ -645,18 +647,30 @@ export const emailForgotPasswordOTP = (email, OTP) => {
             </tr>
           </thead>
           <tbody>
-            ${users.map(user => `
+            ${users
+              .map(
+                (user) => `
               <tr>
                 <td>${user.id}</td>
                 <td>${user.name}</td>
                 <td>${user.email}</td>
-                <td><span class="status status-${user.status === 'active' ? 'active' : 'suspended'}">${user.status}</span></td>
-                <td class="subscription ${user.is_subscribed ? 'subscribed' : 'not-subscribed'}">
-                  ${user.is_subscribed ? 'Yes' : 'No'}
+                <td><span class="status status-${
+                  user.status === "active" ? "active" : "suspended"
+                }">${user.status}</span></td>
+                <td class="subscription ${
+                  user.is_subscribed ? "subscribed" : "not-subscribed"
+                }">
+                  ${user.is_subscribed ? "Yes" : "No"}
                 </td>
-                <td>${new Date(user.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
+                <td>${new Date(user.created_at).toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })}</td>
               </tr>
-            `).join('')}
+            `
+              )
+              .join("")}
           </tbody>
         </table>
         
@@ -666,9 +680,9 @@ export const emailForgotPasswordOTP = (email, OTP) => {
       </body>
       </html>
     `;
-  };
-  export const generateSubscriptionHtml = (subscriptions) => {
-    return `
+};
+export const generateSubscriptionHtml = (subscriptions) => {
+  return `
       <!DOCTYPE html>
       <html lang="en">
       <head>
@@ -780,12 +794,12 @@ export const emailForgotPasswordOTP = (email, OTP) => {
         </div>
   
         <div class="report-meta">
-          Generated on: ${new Date().toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
+          Generated on: ${new Date().toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
           })}
         </div>
   
@@ -802,29 +816,385 @@ export const emailForgotPasswordOTP = (email, OTP) => {
             </tr>
           </thead>
           <tbody>
-            ${subscriptions.map(sub => `
+            ${subscriptions
+              .map(
+                (sub) => `
               <tr>
                 <td>
-                  ${sub.user?.name || 'N/A'}<br>
-                  <a href="mailto:${sub.user?.email || ''}" style="color: #3498db;">${sub.user?.email || 'N/A'}</a>
+                  ${sub.user?.name || "N/A"}<br>
+                  <a href="mailto:${
+                    sub.user?.email || ""
+                  }" style="color: #3498db;">${sub.user?.email || "N/A"}</a>
                 </td>
-                <td class="plan">${sub.service?.name || sub.plan || 'N/A'}</td>
-                <td class="amount">$${(sub.price ? sub.price.toFixed(2) : (sub.service?.price?.toFixed(2) || '0.00'))}</td>
-                <td class="date-cell">${sub.start_date ? new Date(sub.start_date).toLocaleDateString() : 'N/A'}</td>
-                <td class="date-cell">${sub.end_date ? new Date(sub.end_date).toLocaleDateString() : 'N/A'}</td>
-                <td class="status-${sub.status.toLowerCase()}">${sub.status}</td>
-                <td class="date-cell">${sub.PaymentTransaction?.[0]?.created_at ? new Date(sub.PaymentTransaction[0].created_at).toLocaleDateString() : new Date(sub.created_at).toLocaleDateString()}</td>
+                <td class="plan">${sub.service?.name || sub.plan || "N/A"}</td>
+                <td class="amount">$${
+                  sub.price
+                    ? sub.price.toFixed(2)
+                    : sub.service?.price?.toFixed(2) || "0.00"
+                }</td>
+                <td class="date-cell">${
+                  sub.start_date
+                    ? new Date(sub.start_date).toLocaleDateString()
+                    : "N/A"
+                }</td>
+                <td class="date-cell">${
+                  sub.end_date
+                    ? new Date(sub.end_date).toLocaleDateString()
+                    : "N/A"
+                }</td>
+                <td class="status-${sub.status.toLowerCase()}">${
+                  sub.status
+                }</td>
+                <td class="date-cell">${
+                  sub.PaymentTransaction?.[0]?.created_at
+                    ? new Date(
+                        sub.PaymentTransaction[0].created_at
+                      ).toLocaleDateString()
+                    : new Date(sub.created_at).toLocaleDateString()
+                }</td>
               </tr>
-            `).join('')}
+            `
+              )
+              .join("")}
           </tbody>
         </table>
   
         <div class="footer">
           <p>Total Subscriptions: ${subscriptions.length}</p>
-          <p>Active Subscriptions: ${subscriptions.filter(s => s.status === 'Active').length}</p>
-          <p>Ended Subscriptions: ${subscriptions.filter(s => s.status === 'Ended').length}</p>
+          <p>Active Subscriptions: ${
+            subscriptions.filter((s) => s.status === "Active").length
+          }</p>
+          <p>Ended Subscriptions: ${
+            subscriptions.filter((s) => s.status === "Ended").length
+          }</p>
         </div>
       </body>
       </html>
     `;
-  };
+};
+
+export const emailSuspendUser = (email, suspend_endTime) => {
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Your Account has been Suspended</title>
+    </head>
+    <body style="margin: 0; padding: 0; background-color: #f9f9f9; font-family: 'Arial', 'Helvetica', sans-serif;">
+      <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="max-width: 600px; margin: auto; background-color: #ffffff; border: 1px solid #e0e0e0; border-radius: 4px; overflow: hidden; margin-top: 40px; margin-bottom: 40px;">
+        <tr>
+          <td style="padding: 0;">
+            <!-- Header -->
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+              <tr>
+                <td style="background-color: #e74c3c; padding: 30px 40px;">
+                  <h1 style="color: #ffffff; font-family: 'Arial', 'Helvetica', sans-serif; font-size: 24px; font-weight: 600; margin: 0; letter-spacing: 0.3px;">Maintenance Genie Security</h1>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Document Title -->
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+              <tr>
+                <td style="padding: 40px 40px 20px;">
+                  <h2 style="color: #2c3e50; font-family: 'Arial', 'Helvetica', sans-serif; font-size: 20px; font-weight: 600; margin: 0; border-bottom: 1px solid #e0e0e0; padding-bottom: 15px;">ACCOUNT SUSPENDED</h2>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Introduction -->
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+              <tr>
+                <td style="padding: 0 40px 30px;">
+                  <p style="color: #2c3e50; font-size: 15px; line-height: 24px; margin: 0 0 15px;">
+                    Dear User,
+                  </p>
+                  <p style="color: #2c3e50; font-size: 15px; line-height: 24px; margin: 0 0 15px;">
+                    Your Maintenance Genie account has been temporarily suspended. The suspension will remain in effect until ${suspend_endTime}. If you need assistance or have any questions, please feel free to contact our support team.
+                  </p>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Security Notice -->
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+              <tr>
+                <td style="padding: 0 40px 30px;">
+                  <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #fff9e6; border-left: 4px solid #f1c40f; padding: 15px;">
+                    <tr>
+                      <td style="padding: 10px 15px;">
+                        <p style="color: #7d6608; font-size: 14px; line-height: 21px; margin: 0; font-weight: 500;">
+                          <strong>IMPORTANT:</strong> Your account will be suspended until the mentioned date. Please take any necessary actions before that time.
+                        </p>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Closing -->
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+              <tr>
+                <td style="padding: 0 40px 40px;">
+                  <p style="color: #2c3e50; font-size: 15px; line-height: 24px; margin: 0 0 15px;">
+                    If you need any assistance, please contact our support team.
+                  </p>
+                  <p style="color: #2c3e50; font-size: 15px; line-height: 24px; margin: 0 0 5px;">
+                    Regards,
+                  </p>
+                  <p style="color: #2c3e50; font-size: 15px; line-height: 24px; margin: 0 0 5px;">
+                    <strong>Maintenance Genie Security Team</strong>
+                  </p>
+                  <p style="color: #2c3e50; font-size: 15px; line-height: 24px; margin: 0;">
+                    Maintenance Genie Corporation
+                  </p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
+  `;
+};
+
+export const emailUnsuspendUser = (email) => {
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Your Account has been Reactivated</title>
+    </head>
+    <body style="margin: 0; padding: 0; background-color: #f9f9f9; font-family: 'Arial', 'Helvetica', sans-serif;">
+      <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="max-width: 600px; margin: auto; background-color: #ffffff; border: 1px solid #e0e0e0; border-radius: 4px; overflow: hidden; margin-top: 40px; margin-bottom: 40px;">
+        <tr>
+          <td style="padding: 0;">
+            <!-- Header -->
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+              <tr>
+                <td style="background-color: #27ae60; padding: 30px 40px;">
+                  <h1 style="color: #ffffff; font-family: 'Arial', 'Helvetica', sans-serif; font-size: 24px; font-weight: 600; margin: 0; letter-spacing: 0.3px;">Maintenance Genie Security</h1>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Document Title -->
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+              <tr>
+                <td style="padding: 40px 40px 20px;">
+                  <h2 style="color: #2c3e50; font-family: 'Arial', 'Helvetica', sans-serif; font-size: 20px; font-weight: 600; margin: 0; border-bottom: 1px solid #e0e0e0; padding-bottom: 15px;">ACCOUNT REACTIVATED</h2>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Introduction -->
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+              <tr>
+                <td style="padding: 0 40px 30px;">
+                  <p style="color: #2c3e50; font-size: 15px; line-height: 24px; margin: 0 0 15px;">
+                    Dear User,
+                  </p>
+                  <p style="color: #2c3e50; font-size: 15px; line-height: 24px; margin: 0 0 15px;">
+                    Your Maintenance Genie account has been successfully reactivated. You can now log in and continue using your account.
+                  </p>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Closing -->
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+              <tr>
+                <td style="padding: 0 40px 40px;">
+                  <p style="color: #2c3e50; font-size: 15px; line-height: 24px; margin: 0 0 15px;">
+                    If you need any assistance, please contact our support team.
+                  </p>
+                  <p style="color: #2c3e50; font-size: 15px; line-height: 24px; margin: 0 0 5px;">
+                    Regards,
+                  </p>
+                  <p style="color: #2c3e50; font-size: 15px; line-height: 24px; margin: 0 0 5px;">
+                    <strong>Maintenance Genie Security Team</strong>
+                  </p>
+                  <p style="color: #2c3e50; font-size: 15px; line-height: 24px; margin: 0;">
+                    Maintenance Genie Corporation
+                  </p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
+  `;
+};
+
+export const emailDeactivateUser = (email, deactivationPeriod) => {
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Account Deactivation Notification</title>
+    </head>
+    <body style="margin: 0; padding: 0; background-color: #f9f9f9; font-family: 'Arial', 'Helvetica', sans-serif;">
+      <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="max-width: 600px; margin: auto; background-color: #ffffff; border: 1px solid #e0e0e0; border-radius: 4px; overflow: hidden; margin-top: 40px; margin-bottom: 40px;">
+        <tr>
+          <td style="padding: 0;">
+            <!-- Header -->
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+              <tr>
+                <td style="background-color: #e74c3c; padding: 30px 40px;">
+                  <h1 style="color: #ffffff; font-family: 'Arial', 'Helvetica', sans-serif; font-size: 24px; font-weight: 600; margin: 0; letter-spacing: 0.3px;">Maintenance Genie Security</h1>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Document Title -->
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+              <tr>
+                <td style="padding: 40px 40px 20px;">
+                  <h2 style="color: #2c3e50; font-family: 'Arial', 'Helvetica', sans-serif; font-size: 20px; font-weight: 600; margin: 0; border-bottom: 1px solid #e0e0e0; padding-bottom: 15px;">ACCOUNT DEACTIVATED</h2>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Introduction -->
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+              <tr>
+                <td style="padding: 0 40px 30px;">
+                  <p style="color: #2c3e50; font-size: 15px; line-height: 24px; margin: 0 0 15px;">
+                    Dear User,
+                  </p>
+                  <p style="color: #2c3e50; font-size: 15px; line-height: 24px; margin: 0 0 15px;">
+                    We regret to inform you that your Maintenance Genie account has been temporarily deactivated. Your account will remain deactivated for the next ${deactivationPeriod} days.
+                  </p>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Security Notice -->
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+              <tr>
+                <td style="padding: 0 40px 30px;">
+                  <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #fff9e6; border-left: 4px solid #f1c40f; padding: 15px;">
+                    <tr>
+                      <td style="padding: 10px 15px;">
+                        <p style="color: #7d6608; font-size: 14px; line-height: 21px; margin: 0; font-weight: 500;">
+                          <strong>IMPORTANT:</strong> Your account will be reactivated on the ${new Date(
+                            Date.now() +
+                              deactivationPeriod * 24 * 60 * 60 * 1000
+                          ).toLocaleDateString()}.
+                        </p>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Closing -->
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+              <tr>
+                <td style="padding: 0 40px 40px;">
+                  <p style="color: #2c3e50; font-size: 15px; line-height: 24px; margin: 0 0 15px;">
+                    If you need any assistance, please contact our support team.
+                  </p>
+                  <p style="color: #2c3e50; font-size: 15px; line-height: 24px; margin: 0 0 5px;">
+                    Regards,
+                  </p>
+                  <p style="color: #2c3e50; font-size: 15px; line-height: 24px; margin: 0 0 5px;">
+                    <strong>Maintenance Genie Security Team</strong>
+                  </p>
+                  <p style="color: #2c3e50; font-size: 15px; line-height: 24px; margin: 0;">
+                    Maintenance Genie Corporation
+                  </p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
+  `;
+};
+
+
+export const emailReactivateUser = (email) => {
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Your Account has been Reactivated</title>
+    </head>
+    <body style="margin: 0; padding: 0; background-color: #f9f9f9; font-family: 'Arial', 'Helvetica', sans-serif;">
+      <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="max-width: 600px; margin: auto; background-color: #ffffff; border: 1px solid #e0e0e0; border-radius: 4px; overflow: hidden; margin-top: 40px; margin-bottom: 40px;">
+        <tr>
+          <td style="padding: 0;">
+            <!-- Header -->
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+              <tr>
+                <td style="background-color: #27ae60; padding: 30px 40px;">
+                  <h1 style="color: #ffffff; font-family: 'Arial', 'Helvetica', sans-serif; font-size: 24px; font-weight: 600; margin: 0; letter-spacing: 0.3px;">Maintenance Genie Security</h1>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Document Title -->
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+              <tr>
+                <td style="padding: 40px 40px 20px;">
+                  <h2 style="color: #2c3e50; font-family: 'Arial', 'Helvetica', sans-serif; font-size: 20px; font-weight: 600; margin: 0; border-bottom: 1px solid #e0e0e0; padding-bottom: 15px;">ACCOUNT REACTIVATED</h2>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Introduction -->
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+              <tr>
+                <td style="padding: 0 40px 30px;">
+                  <p style="color: #2c3e50; font-size: 15px; line-height: 24px; margin: 0 0 15px;">
+                    Dear User,
+                  </p>
+                  <p style="color: #2c3e50; font-size: 15px; line-height: 24px; margin: 0 0 15px;">
+                    Your Maintenance Genie account has been successfully reactivated. You can now log in and continue using your account.
+                  </p>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Closing -->
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+              <tr>
+                <td style="padding: 0 40px 40px;">
+                  <p style="color: #2c3e50; font-size: 15px; line-height: 24px; margin: 0 0 15px;">
+                    If you need any assistance, please contact our support team.
+                  </p>
+                  <p style="color: #2c3e50; font-size: 15px; line-height: 24px; margin: 0 0 5px;">
+                    Regards,
+                  </p>
+                  <p style="color: #2c3e50; font-size: 15px; line-height: 24px; margin: 0 0 5px;">
+                    <strong>Maintenance Genie Security Team</strong>
+                  </p>
+                  <p style="color: #2c3e50; font-size: 15px; line-height: 24px; margin: 0;">
+                    Maintenance Genie Corporation
+                  </p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
+  `;
+};
