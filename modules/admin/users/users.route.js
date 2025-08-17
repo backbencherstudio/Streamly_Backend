@@ -1,6 +1,4 @@
 import express from "express";
-import path from "path";
-import { randomUUID } from "crypto";
 import { PrismaClient } from "@prisma/client";
 import {
   deleteUser,
@@ -9,9 +7,7 @@ import {
   totalUsers,
   unsuspendUser,
 } from "./users.controller.js";
-import { get } from "http";
 import { verifyUser } from "../../../middlewares/verifyUsers.js";
-import r from "../video_routes/contenets.route.js";
 
 const prisma = new PrismaClient();
 const router = express.Router();

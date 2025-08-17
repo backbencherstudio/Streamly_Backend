@@ -13,7 +13,6 @@ const buildS3Url = (bucket, key) => {
 };
 const buildLocalUrl = (filePath) => {
   if (!filePath) return null;
-  // Assuming your local server is running at 'http://localhost:9000'
   return `http://localhost:9000/${filePath}`;
 };
 
@@ -66,9 +65,9 @@ export const getAllServices = async (req, res) => {
   }
 };
 
-// Category CRUD operations
+
 export const createCategory = async (req, res) => {
-  // console.log("this is the create category");
+  
   try {
     const { name, slug, status } = req.body;
     if (!name || !slug) {
