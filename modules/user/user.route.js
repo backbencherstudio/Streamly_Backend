@@ -11,6 +11,7 @@ import {
   sendMailToAdmin,
   getMe,
   googleLogin,
+  authenticateUser,
 } from "./user.controller.js";
 import { upload } from "../../config/Multer.config.js";
 import { verifyUser } from "../../middlewares/verifyUsers.js";
@@ -43,7 +44,7 @@ router.patch("/google-login", googleLogin);
 router.post("/forget_pass", forgotPasswordOTPsend);
 router.post("/checkForgetPassOtp", verifyForgotPasswordOTP);
 router.post("/resetPass", resetPassword);
-router.post("/change-password", verifyUser("USER"), changePassword);
+router.post("/change-password", verifyUser("normal"), changePassword);
 
 //update user img
 // Allow both users and admins to update their own profile and image
@@ -63,5 +64,5 @@ router.put(
 router.post("/sende-mail", verifyUser("USER"), sendMailToAdmin);
 
 //get me
-router.get("/get-me", verifyUser("normal"), getMe);
+router.get("/get-me",authenticateUser, getMe);
 export default router;
