@@ -1197,3 +1197,75 @@ export const emailReactivateUser = (email) => {
     </html>
   `;
 };
+
+export const createAdminTicketNotificationEmail = (
+  userEmail,
+  subject,
+  description
+) => {
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>New Support Ticket Created</title>
+      <style>
+        body {
+          font-family: 'Arial', 'Helvetica', sans-serif;
+          background-color: #f4f6f9;
+          margin: 0;
+          padding: 0;
+          color: #2c3e50;
+        }
+        .container {
+          width: 100%;
+          max-width: 600px;
+          margin: auto;
+          background-color: #ffffff;
+          padding: 20px;
+          border-radius: 8px;
+          box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+          color: #2980b9;
+          font-size: 24px;
+        }
+        .ticket-details {
+          margin-top: 20px;
+          padding: 15px;
+          background-color: #ecf0f1;
+          border-radius: 5px;
+        }
+        .ticket-details p {
+          font-size: 16px;
+          line-height: 1.6;
+        }
+        .ticket-details strong {
+          color: #2980b9;
+        }
+        .footer {
+          margin-top: 30px;
+          text-align: center;
+          color: #7f8c8d;
+          font-size: 12px;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <h1>New Support Ticket Created</h1>
+        <div class="ticket-details">
+          <p><strong>User Email:</strong> ${userEmail}</p>
+          <p><strong>Subject:</strong> ${subject}</p>
+          <p><strong>Description:</strong> ${description}</p>
+        </div>
+        <p style="font-size: 14px;">You have received a new support ticket. Please review the details above and take necessary action.</p>
+        <div class="footer">
+          <p>This is a system-generated email. Please do not reply directly to this email.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+};
