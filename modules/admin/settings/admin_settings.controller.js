@@ -1,12 +1,8 @@
-import { PrismaClient } from "@prisma/client"; 
+import { PrismaClient } from "@prisma/client";
 import { emailReactivateUser } from "../../../constants/email_message.js";
 import { sendEmail } from "../../../utils/mailService.js";
 import bcrypt from "bcryptjs";
-const prisma = new PrismaClient();          
-
-
-
-
+const prisma = new PrismaClient();
 
 //---------------------deactivate user account-------------------
 export const deactivateAccount = async (req, res) => {
@@ -44,15 +40,12 @@ export const deactivateAccount = async (req, res) => {
       message: `Account deactivated successfully for ${deactivationPeriod} days.`,
     });
 
-    // Send deactivation email to the user
     const emailContent = emailDeactivateUser(user.email, deactivationPeriod);
     await sendEmail(
       user.email,
       "Account Deactivation Notification",
       emailContent
     );
-
-
   } catch (error) {
     console.error("Error deactivating account:", error);
     res.status(500).json({ error: "Failed to deactivate account" });
@@ -64,7 +57,6 @@ export const activateUser = async (req, res) => {
   const { email, password } = req.body;
 
   try {
-
     if (!email || !password) {
       return res.status(400).json({ error: "Email and password are required" });
     }
@@ -76,15 +68,11 @@ export const activateUser = async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
-    //check users password 
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       return res.status(401).json({ message: "Invalid password" });
     }
 
-    
-
-    // updating the user
     await prisma.user.update({
       where: { id: user.id },
       data: {
@@ -94,12 +82,7 @@ export const activateUser = async (req, res) => {
       },
     });
 
-
-
     res.json({ message: "User account activated successfully" });
-
-
-    // sending email to user
 
     const emailContent = emailReactivateUser(user.email, deactivationPeriod);
     await sendEmail(
@@ -107,7 +90,6 @@ export const activateUser = async (req, res) => {
       "Account Deactivation Notification",
       emailContent
     );
-
   } catch (error) {
     console.error("Error activating account:", error);
     res.status(500).json({ error: "Failed to activate account" });
@@ -119,7 +101,6 @@ export const deleteAccount = async (req, res) => {
   const { userId } = req.params;
 
   try {
-    // Delete the user account permanently
     await prisma.user.delete({
       where: { id: userId },
     });

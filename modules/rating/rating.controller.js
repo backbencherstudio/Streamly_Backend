@@ -2,9 +2,11 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
+
+//---------------------createRating-----------------------
 export const createRating = async (req, res) => {
   try {
-    const user_id = req.user?.userId; // Get userId from token
+    const user_id = req.user?.userId; 
     const { content_id, rating, comment } = req.body;
 
     console.log("createRating:", user_id, content_id, rating, comment);
@@ -50,7 +52,7 @@ export const getAllRatings = async (req, res) => {
   }
 };
 
-// Get rating by ID
+//------------------getRatingById-------------------
 export const getRatingById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -65,7 +67,7 @@ export const getRatingById = async (req, res) => {
   }
 };
 
-// Update rating
+//------------------updateRating-------------------
 export const updateRating = async (req, res) => {
   try {
     const { id } = req.params;
@@ -86,7 +88,7 @@ export const updateRating = async (req, res) => {
   }
 };
 
-// Delete rating
+//------------------deleteRating-------------------
 export const deleteRating = async (req, res) => {
   try {
     const { id } = req.params;
@@ -101,9 +103,11 @@ export const deleteRating = async (req, res) => {
   }
 };
 
+
+//------------------topRatedContentThisWeek-------------------
 export const topRatedContentThisWeek = async (req, res) => {
   try {
-    // Get top 3 rated content in the last 7 days
+    
     const topRatings = await prisma.rating.groupBy({
       by: ['content_id'],
       _avg: {
@@ -111,10 +115,10 @@ export const topRatedContentThisWeek = async (req, res) => {
       },
       orderBy: {
         _avg: {
-          rating: 'desc', // Sort by average rating in descending order
+          rating: 'desc', 
         },
       },
-      take: 3, // Limit to the top 3 rated content
+      take: 3, 
       where: {
         created_at: {
           gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // Last 7 days

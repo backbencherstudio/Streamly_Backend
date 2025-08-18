@@ -49,7 +49,7 @@ app.use(
   })
 );
 
-//Cron job
+//--------------Cron job for subscription cleanup-------------------
 let counter = 0;
 nodeCron.schedule("0 0 * * *", async () => {
   try {
@@ -99,41 +99,15 @@ nodeCron.schedule("0 0 * * *", async () => {
   }
 });
 
-// Cron job to unsuspend users
-// nodeCron.schedule("0 0 * * *", async () => {
-//   try {
-//     const now = new Date();
-//     console.log(`Cron job running at: ${now.toISOString()}`);
-//     const usersToUpdate = await prisma.user.findMany({
-//       where: {
-//         status: "suspended",
-//         suspend_endTime: {
-//           lte: now,
-//         },
-//       },
-//     });
-//     if (usersToUpdate.length >= 0) {
-//       await prisma.user.updateMany({
-//         where: { id: { in: usersToUpdate.map((user) => user.id) } },
-//         data: { status: "active", suspend_endTime: null },
-//       });
-//       console.log(`Unsuspended ${usersToUpdate.length} users.`);
-//     }
-//   } catch (error) {
-//     console.log("error is:", error);
-//   }
-// });
-
-// Cron job to unsuspend users
+//-----------------Cron job for unsuspend users----------------------
 nodeCron.schedule("0 0 * * *", async () => {
-  console.log("Cron job triggered at:", new Date().toISOString()); // Log to check if cron is triggering
+  console.log("Cron job triggered at:", new Date().toISOString()); 
   try {
     const now = new Date();
     console.log(
       `Checking for suspended users to unsuspend at: ${now.toISOString()}`
     );
 
-    // Fetch users whose suspension end time has passed
     const usersToUpdate = await prisma.user.findMany({
       where: {
         status: "suspended",
@@ -146,20 +120,20 @@ nodeCron.schedule("0 0 * * *", async () => {
     if (usersToUpdate.length > 0) {
       console.log(`Found ${usersToUpdate.length} users to unsuspend.`);
 
-      // Unsuspend the users
+
       await prisma.user.updateMany({
         where: { id: { in: usersToUpdate.map((user) => user.id) } },
         data: { status: "active", suspend_endTime: null },
       });
 
-      // Send email to each unsuspended user
+
       for (const user of usersToUpdate) {
-        const emailContent = emailUnsuspendUser(user.email); // Use the unsuspend email template
+        const emailContent = emailUnsuspendUser(user.email); 
         await sendEmail(
           user.email,
           "Your Account Has Been Reactivated",
           emailContent
-        ); // Send the email
+        ); 
         console.log(`Email sent to ${user.email}`);
       }
 
@@ -172,13 +146,13 @@ nodeCron.schedule("0 0 * * *", async () => {
   }
 });
 
-// Cron job to reactivate users
+//-------------------Cron job for user reactivation-------------------
 nodeCron.schedule("0 0 * * *", async () => {
   try {
     const now = new Date();
     console.log(`Cron job running at: ${now.toISOString()}`);
 
-    // Fetch users whose deactivation end time has passed
+    
     const usersToUpdate = await prisma.user.findMany({
       where: {
         status: "deactivated",
@@ -198,9 +172,9 @@ nodeCron.schedule("0 0 * * *", async () => {
         },
       });
 
-      // Send email to each reactivated user
+      
       for (const user of usersToUpdate) {
-        const emailContent = emailReactivateUser(user.email); // Use the reactivation email template
+        const emailContent = emailReactivateUser(user.email); 
         await sendEmail(
           user.email,
           "Your Account Has Been Reactivated",
@@ -218,7 +192,7 @@ nodeCron.schedule("0 0 * * *", async () => {
   }
 });
 
-//JSON parser + Webhook exception
+//-------------------JSON parser + Webhook exception-------------------
 app.use((req, res, next) => {
   if (req.originalUrl === "/api/payments/webhook") {
     express.raw({ type: "application/json" })(req, res, next);

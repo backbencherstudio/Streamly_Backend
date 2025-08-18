@@ -58,10 +58,10 @@ export const deleteUser = async (req, res) => {
   }
 };
 
-
 export const suspendUser = async (req, res) => {
   const { id } = req.params;
-  const { suspend_endTime } = req.body; 
+  const { suspend_endTime } = req.body;
+
   try {
     const user = await prisma.user.update({
       where: { id: id },
@@ -87,9 +87,7 @@ export const unsuspendUser = async (req, res) => {
       data: { status: "active", suspend_endTime: null },
     });
 
-    // Send unsuspension email to the user
     const emailContent = emailUnsuspendUser(user.email);
-    // Use a mailing service like nodemailer to send the email
     await sendEmail(user.email, "Account Reactivated", emailContent);
 
     res.json(user);
