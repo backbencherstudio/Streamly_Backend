@@ -4,21 +4,17 @@ import dotenv from "dotenv";
 import validator from "validator";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import multer from "multer";
 import { PrismaClient } from "@prisma/client";
 import {
   generateOTP,
   receiveEmails,
   sendForgotPasswordOTP,
-  sendRegistrationOTPEmail,
 } from "../../utils/mailService.js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import pkg from "jsonwebtoken";
 
 const prisma = new PrismaClient();
-const { sign, verify } = pkg;
 dotenv.config();
 const { isEmail } = validator;
 const __filename = fileURLToPath(import.meta.url);
@@ -29,6 +25,51 @@ const hashPassword = async (password) => {
   const salt = await bcrypt.genSalt(8);
   return await bcrypt.hash(password, salt);
 };
+
+//get me
+export const getMe = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      console.log("Authentication failed. User ID is undefined:", req.user); // Log user info for debugging
+      return res.status(400).json({ message: "User not authenticated" });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        avatar: true,
+        role: true,
+        status: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const imageUrl = user.avatar
+      ? `http://localhost:4005/uploads/${user.avatar}`
+      : null;
+
+    return res.status(200).json({
+      success: true,
+      message: "User details retrieved successfully",
+      data: { ...user, imageUrl },
+    });
+  } catch (error) {
+    // Log the error to help with debugging
+    console.error("Error retrieving user details:", error);
+    
+    // Return a generic error response
+    return res.status(500).json({ message: "Internal Server Error", error: error.message });
+  }
+};
+
 
 //--------------------register user--------------------
 // Register a new user
@@ -111,10 +152,13 @@ export const loginUser = async (req, res) => {
       });
     }
 
-    const isPasswordValid = bcrypt.compare(password, user.password);
+    const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       return res.status(401).json({ message: "Invalid password" });
     }
+ 
+     console.log("User ID", user.id , "password matched" );
+    
 
     const token = jwt.sign(
       { userId: user.id, email: user.email, role: user.role, type: user.type },
@@ -578,47 +622,7 @@ export const sendMailToAdmin = async (req, res) => {
       .json({ message: "Internal Server Error", error: error.message });
   }
 };
-//get me
-export const getMe = async (req, res) => {
-  try {
-    const userId = req.user?.userId;
 
-    if (!userId) {
-      return res.status(400).json({ message: "User not authenticated" });
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        avatar: true,
-        created_at: true,
-        updated_at: true,
-      },
-    });
-
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    const imageUrl = user.avatar
-      ? `http://localhost:4005/uploads/${user.avatar}`
-      : null;
-
-    return res.status(200).json({
-      success: true,
-      message: "User details retrieved successfully",
-      data: { ...user, imageUrl },
-    });
-  } catch (error) {
-    console.error("Error retrieving user details:", error);
-    return res
-      .status(500)
-      .json({ message: "Internal Server Error", error: error.message });
-  }
-};
 
 //---------- Google login via ID token from frontend---------------
 export const googleLogin = async (req, res) => {

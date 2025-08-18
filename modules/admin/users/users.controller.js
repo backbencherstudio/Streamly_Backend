@@ -106,3 +106,48 @@ export const totalUsers = async (req, res) => {
     console.log("Error fetching total users:", err);
   }
 };
+
+// get one user by id
+export const getUserById = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: id },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        status: true,
+        role: true,
+        created_at: true,
+        updated_at: true,
+        Subscription: {
+          select: {
+            status: true,
+            start_date: true,
+            end_date: true,
+            plan: true,
+          },
+        },
+        PaymentTransaction: {
+          select: {
+            id: true,
+            price: true,
+            status: true,
+            created_at: true,
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch user" });
+    console.log("Error fetching user:", err);
+  }
+}
