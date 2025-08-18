@@ -93,13 +93,15 @@ export const loginUser = async (req, res) => {
 
     if (user.status === "deactivated") {
       return res.status(403).json({
-        message: "Your account is deactivated. Please activate your account to log in.",
+        message:
+          "Your account is deactivated. Please activate your account to log in.",
       });
     }
 
-    if(user.status === "suspended") {
+    if (user.status === "suspended") {
       return res.status(403).json({
-        message: "Your account is suspended. Please contact support for assistance.",
+        message:
+          "Your account is suspended. Please contact support for assistance.",
       });
     }
 
@@ -109,7 +111,7 @@ export const loginUser = async (req, res) => {
       });
     }
 
-    const isPasswordValid =  bcrypt.compare(password, user.password);
+    const isPasswordValid = bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       return res.status(401).json({ message: "Invalid password" });
     }
@@ -618,7 +620,7 @@ export const getMe = async (req, res) => {
   }
 };
 
-// Google login via ID token from frontend
+//---------- Google login via ID token from frontend---------------
 export const googleLogin = async (req, res) => {
   const { idToken } = req.body;
   if (!idToken) {
@@ -628,16 +630,14 @@ export const googleLogin = async (req, res) => {
   const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
   try {
-    // Verify the ID Token with Google
     const ticket = await client.verifyIdToken({
       idToken,
       audience: process.env.GOOGLE_CLIENT_ID,
     });
 
     const payload = ticket.getPayload();
-    console.log("Google Token Payload:", payload); // Log the payload for debugging
+    console.log("Google Token Payload:", payload);
 
-    // Check if email exists in the payload
     const email = payload.email;
     if (!email) {
       return res.status(400).json({
@@ -648,28 +648,24 @@ export const googleLogin = async (req, res) => {
     const name = payload.name;
     const avatar = payload.picture;
 
-    // Check if the user already exists in the database
     let user = await prisma.user.findUnique({ where: { email } });
 
     if (!user) {
-      // Create new user if they do not exist
       user = await prisma.user.create({
         data: {
           email,
           name,
           avatar,
-          password: "", // No password needed for Google login
+          password: "",
         },
       });
     } else {
-      // Update user information if necessary
       user = await prisma.user.update({
         where: { email },
         data: { name, avatar },
       });
     }
 
-    // Issue a JWT token for the session
     const token = jwt.sign(
       {
         userId: user.id,
@@ -682,7 +678,6 @@ export const googleLogin = async (req, res) => {
       { expiresIn: "7d" }
     );
 
-    // Send back the success response with user data and token
     return res.status(200).json({
       success: true,
       message: "Google login successful",
@@ -695,7 +690,6 @@ export const googleLogin = async (req, res) => {
       token,
     });
   } catch (error) {
-    // Return an error response if something goes wrong
     return res.status(401).json({
       success: false,
       message: "Invalid Google token",
