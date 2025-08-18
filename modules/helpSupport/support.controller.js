@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
-import { sendSuccessfullyPostedTokenEmail } from "../../utils/mailService.js";
+import { sendEmail } from "../../utils/mailService.js";
+import { createAdminTicketNotificationEmail } from "../../constants/email_message.js";
 
 const prisma = new PrismaClient();
 
@@ -21,8 +22,19 @@ export const createSupportTicket = async (req, res) => {
       },
     });
 
-    const token = newTicket.id;  
-    await sendSuccessfullyPostedTokenEmail(user?.email, token);
+    try {
+      const adminEmail = process.env.ADMIN_EMAIL;
+      const emailSubject = "New Support Ticket Created";
+      const emailBody = createAdminTicketNotificationEmail(
+        user?.email,
+        subject,
+        description
+      );
+
+      await sendEmail(adminEmail, emailSubject, emailBody);
+    } catch (error) {
+      console.error("Error sending email:", error);
+    }
 
     return res.status(201).json({
       success: true,
@@ -82,13 +94,10 @@ export const solveTicket = async (req, res) => {
 
       return res.status(200).json({
         success: true,
-        message: "Ticket resolved successfully",
+        message: "Ticket resolved successfully, and email sent to the user",
         ticket: result.status,
       });
     }
-
-
-
   } catch (error) {
     console.error("Error in solveTicket:", error);
     return res.status(500).json({ message: "Internal Server Error" });
