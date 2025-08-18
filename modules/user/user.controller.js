@@ -64,7 +64,7 @@ export const getMe = async (req, res) => {
   } catch (error) {
     // Log the error to help with debugging
     console.error("Error retrieving user details:", error);
-    
+
     // Return a generic error response
     return res.status(500).json({ message: "Internal Server Error", error: error.message });
   }
@@ -156,9 +156,9 @@ export const loginUser = async (req, res) => {
     if (!isPasswordValid) {
       return res.status(401).json({ message: "Invalid password" });
     }
- 
-     console.log("User ID", user.id , "password matched" );
-    
+
+    console.log("User ID", user.id, "password matched");
+
 
     const token = jwt.sign(
       { userId: user.id, email: user.email, role: user.role, type: user.type },
@@ -268,117 +268,94 @@ export const forgotPasswordOTPsend = async (req, res) => {
 };
 // Match forgot password OTP
 export const verifyForgotPasswordOTP = async (req, res) => {
-  try {
-    const { otp, email } = req.body;
+  const { otp, email } = req.body;
 
-    if (!otp || !email) {
-      return res.status(400).json({ message: "OTP and email are required" });
-    }
-
-    const existingTempUser = await prisma.temp.findUnique({
-      where: { email },
-    });
-
-    if (!existingTempUser) {
-      return res.status(400).json({ message: "Invalid or expired OTP" });
-    }
-
-    if (new Date() > new Date(existingTempUser.expires_at)) {
-      return res.status(400).json({
-        success: false,
-        message: "OTP expired. Please request a new OTP.",
-        shouldResendOtp: true,
-        ucodeId: existingTempUser.id,
-      });
-    }
-
-    if (existingTempUser.otp !== otp) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid OTP",
-      });
-    }
-
-    const jwtToken = jwt.sign(
-      {
-        userId: existingTempUser.id,
-        email: existingTempUser.email,
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: "10d" }
-    );
-
-    await prisma.temp.delete({
-      where: { id: existingTempUser.id },
-    });
-
-    return res.status(200).json({
-      success: true,
-      message: "OTP matched successfully. You can now reset your password.",
-      token: jwtToken,
-    });
-  } catch (error) {
-    console.error("Error in verifyForgotPasswordOTP:", error);
-    return res.status(500).json({ message: "Internal Server Error" });
+  if (!otp || !email) {
+    return res.status(400).json({ message: "OTP and email are required" });
   }
+
+  const existingTempUser = await prisma.temp.findUnique({
+    where: { email },
+  });
+
+  if (!existingTempUser) {
+    return res.status(400).json({ message: "Invalid or expired OTP" });
+  }
+
+  if (new Date() > new Date(existingTempUser.expires_at)) {
+    return res.status(400).json({
+      message: "OTP expired. Please request a new OTP.",
+    });
+  }
+
+  if (existingTempUser.otp !== otp) {
+    return res.status(400).json({ message: "Invalid OTP" });
+  }
+
+  const jwtToken = jwt.sign(
+    { email: existingTempUser.email },
+    process.env.JWT_SECRET_KEY,
+    { expiresIn: "1h" }
+  );
+
+  await prisma.temp.delete({ where: { id: existingTempUser.id } });
+
+  return res.status(200).json({
+    message: "OTP matched successfully. Use the token to reset your password.",
+    token: jwtToken,
+  });
 };
+
 // Reset password
 export const resetPassword = async (req, res) => {
-  try {
-    const { newPassword } = req.body;
+  const { newPassword } = req.body;
 
-    if (!newPassword || newPassword.length < 8) {
-      return res
-        .status(400)
-        .json({ message: "Password must be at least 8 characters long" });
-    }
-
-    const token = req.headers["authorization"]?.split(" ")[1];
-
-    if (!token) {
-      return res
-        .status(400)
-        .json({ message: "Authorization token is required" });
-    }
-
-    let decoded;
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
-    } catch (error) {
-      return res.status(401).json({ message: "Invalid or expired token" });
-    }
-
-    const { email } = decoded;
-
-    const user = await prisma.user.findUnique({
-      where: { email },
-    });
-
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-    const updatedUser = await prisma.user.update({
-      where: { email },
-      data: { password: hashedPassword },
-    });
-
-    return res.status(200).json({
-      success: true,
-      message: "Password reset successfully",
-      user: {
-        id: updatedUser.id,
-        email: updatedUser.email,
-        name: updatedUser.name,
-      },
-    });
-  } catch (error) {
-    console.error("Error in resetPassword:", error);
-    return res.status(500).json({ message: "Internal Server Error" });
+  if (!newPassword || newPassword.length < 8) {
+    return res.status(400).json({ message: "Password must be at least 8 characters long" });
   }
+
+  const token = req.headers.authorization?.split(" ")[1];
+
+  if (!token) {
+    return res.status(400).json({ message: "Authorization token is required" });
+  }
+
+
+  let decoded;
+  try {
+    decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+  } catch (error) {
+    return res.status(401).json({ message: "Invalid or expired token" });
+  }
+
+  const { email } = decoded;
+
+  const user = await prisma.user.findUnique({
+    where: { email },
+  });
+
+
+
+  if (!user) {
+    return res.status(404).json({ message: "User not found" });
+  }
+  const isOldPasswordCorrect = await bcrypt.compare(newPassword, user.password);
+  if (isOldPasswordCorrect) {
+    return res.status(400).json({ message: "New password cannot be the same as the old password" });
+  }
+
+
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+  await prisma.user.update({
+    where: { email },
+    data: { password: hashedPassword },
+  });
+
+  return res.status(200).json({ message: "Password reset successfully" });
 };
+
+
 
 //---------------------user profile--------------------
 // Check if user is authenticated
