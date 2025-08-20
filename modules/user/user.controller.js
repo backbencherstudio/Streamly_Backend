@@ -45,6 +45,14 @@ export const getMe = async (req, res) => {
         avatar: true,
         role: true,
         status: true,
+        date_of_birth: true,
+        phone_number: true,
+        city: true,
+        postal_code: true,
+        bio: true,
+        
+
+
       },
     });
 
@@ -440,14 +448,13 @@ export const updateUserDetails = async (req, res) => {
     const {
       name,
       email,
-      dateOfBirth,
+      date_of_birth,
       address,
       country,
       city,
       state,
-      postalCode,
-      language,
-      phone,
+      postal_code,
+      phone_number,
       bio,
     } = req.body;
     const id = req.user?.userId;
@@ -461,14 +468,13 @@ export const updateUserDetails = async (req, res) => {
       data: {
         name: name,
         email: email,
-        dateOfBirth: dateOfBirth,
+        date_of_birth: date_of_birth || null,
         address: address,
         country: country,
         city: city,
         state: state,
-        postalCode: postalCode,
-        language: language,
-        phone: phone,
+        postal_code: postal_code,
+        phone_number: phone_number,
         bio: bio,
       },
     });
@@ -678,3 +684,49 @@ export const googleLogin = async (req, res) => {
     });
   }
 };
+
+//update passss
+export const updatePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      return res.status(400).json({ message: "User not authenticated" });
+    }
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ message: "Current and new passwords are required" });
+    }
+
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId},
+    });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
+    if (!isCurrentPasswordValid) {
+      return res.status(401).json({ message: "Current password is incorrect" });
+    }
+    const hashedNewPassword = await hashPassword(newPassword);
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedNewPassword },
+    });
+    return res.status(200).json({
+      success: true,
+      message: "Password updated successfully",
+      user: {
+        id: updatedUser.id,
+        email: updatedUser.email,
+        name: updatedUser.name,
+      },
+    });
+  }
+  catch (error) {
+    console.error('Error updating password:', error);
+    return res.status(500).json({ message: "Internal Server Error", error: error.message });
+  }
+}
