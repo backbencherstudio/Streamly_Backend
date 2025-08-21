@@ -300,7 +300,7 @@ export const getTotalActiveSubscriptions = async (req, res) => {
     });
 
     if (totalActiveSubscriptions === 0) {
-      return res.status(201).json({ message: 'Currently no subscription is avilable' });
+      return res.status(201).json({ message: '0' });
     }
     res.json({ totalActiveSubscriptions });
   } catch (error) {
@@ -327,7 +327,7 @@ export const getTotalMonthlyRevenue = async (req, res) => {
     });
 
     if (totalRevenue._sum.price === null) {
-      return res.status(201).json({ message: 'No revenue data available for this month' });
+      return res.status(201).json({ message: '0' });
     }
 
     res.json({ totalMonthlyRevenue: totalRevenue._sum.price || 0 });

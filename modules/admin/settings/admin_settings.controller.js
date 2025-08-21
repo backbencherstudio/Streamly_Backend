@@ -40,7 +40,7 @@ export const deactivateAccount = async (req, res) => {
       message: `Account deactivated successfully for ${deactivationPeriod} days.`,
     });
 
-    const emailContent = emailDeactivateUser(user.email, deactivationPeriod);
+    const emailContent = emailReactivateUser(user.email, deactivationPeriod);
     await sendEmail(
       user.email,
       "Account Deactivation Notification",
@@ -74,7 +74,7 @@ export const activateUser = async (req, res) => {
     }
 
     await prisma.user.update({
-      where: { id: user.id },
+      where: { email: email },
       data: {
         status: "active",
         deactivation_start_date: null,
