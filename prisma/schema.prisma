@@ -46,7 +46,9 @@ model User {
   deleted_at             DateTime?
   email                  String         @unique
   name                   String?
+  address                String?
   password               String?
+  
   customer_id            String?
   country                String?
   gender                 String?
@@ -355,6 +357,7 @@ model Content {
 
   thumbnail        String?         // optional public URL
   video            String?         // optional public URL
+  is_premium     Boolean?       @default(false) // if true, only premium users can access this content
 
   Rating Rating[]
 
