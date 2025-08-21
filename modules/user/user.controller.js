@@ -1,5 +1,3 @@
-import { OAuth2Client } from "google-auth-library";
-
 import dotenv from "dotenv";
 import validator from "validator";
 import bcrypt from "bcryptjs";
@@ -13,6 +11,7 @@ import {
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import passport from "../../config/passport.js"; // Import the configured passport instance
 
 const prisma = new PrismaClient();
 dotenv.config();
@@ -74,10 +73,11 @@ export const getMe = async (req, res) => {
     console.error("Error retrieving user details:", error);
 
     // Return a generic error response
-    return res.status(500).json({ message: "Internal Server Error", error: error.message });
+    return res
+      .status(500)
+      .json({ message: "Internal Server Error", error: error.message });
   }
 };
-
 
 //--------------------register user--------------------
 // Register a new user
@@ -164,6 +164,8 @@ export const loginUser = async (req, res) => {
     if (!isPasswordValid) {
       return res.status(401).json({ message: "Invalid password" });
     }
+
+    console.log("User ID", user.id, "password matched");
 
     console.log("User ID", user.id, "password matched");
 
@@ -607,82 +609,31 @@ export const sendMailToAdmin = async (req, res) => {
 };
 
 
-//---------- Google login via ID token from frontend---------------
-export const googleLogin = async (req, res) => {
-  const { idToken } = req.body;
-  if (!idToken) {
-    return res.status(400).json({ message: "ID token is required" });
-  }
+//----------- google login via using passport js ------------------
+export const googleLogin = (req, res) => {
+  passport.authenticate("google", { scope: ["profile", "email"] })(req, res);
+};
 
-  const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+export const googleCallback = (req, res) => {
+  passport.authenticate(
+    "google",
+    { failureRedirect: "/login" },
+    (err, userInfo) => {
+      if (err || !userInfo) {
+        return res
+          .status(500)
+          .json({ message: "Google authentication failed", error: err });
+      }
 
-  try {
-    const ticket = await client.verifyIdToken({
-      idToken,
-      audience: process.env.GOOGLE_CLIENT_ID,
-    });
+      const { user, token } = userInfo;
 
-    const payload = ticket.getPayload();
-    console.log("Google Token Payload:", payload);
-
-    const email = payload.email;
-    if (!email) {
-      return res.status(400).json({
-        success: false,
-        message: "Email is missing from the Google token payload",
+      res.status(200).json({
+        message: "Google login successful",
+        user,
+        token,
       });
     }
-    const name = payload.name;
-    const avatar = payload.picture;
-
-    let user = await prisma.user.findUnique({ where: { email } });
-
-    if (!user) {
-      user = await prisma.user.create({
-        data: {
-          email,
-          name,
-          avatar,
-          password: "",
-        },
-      });
-    } else {
-      user = await prisma.user.update({
-        where: { email },
-        data: { name, avatar },
-      });
-    }
-
-    const token = jwt.sign(
-      {
-        userId: user.id,
-        email: user.email,
-        role: user.role,
-        type: user.type,
-        googleId: payload.sub,
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" }
-    );
-
-    return res.status(200).json({
-      success: true,
-      message: "Google login successful",
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        avatar: user.avatar,
-      },
-      token,
-    });
-  } catch (error) {
-    return res.status(401).json({
-      success: false,
-      message: "Invalid Google token",
-      error: error.message,
-    });
-  }
+  )(req, res);
 };
 
 //update passss
