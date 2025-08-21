@@ -257,4 +257,29 @@ r.get("/getPopularContents/:categoryId", async (req, res) => {
   }
 });
 
+
+r.delete("/:id", verifyUser("admin"), async (req, res) => {
+  const { id } = req.params;
+  try {
+    const content = await prisma.content.findUnique({
+      where: { id: id },
+    });
+
+    if (!content) {
+      return res
+        .status(404)
+        .json({ error: "Content not exist or maybe deleted" });
+    }
+
+    await prisma.content.delete({
+      where: { id: id },
+    });
+
+    res.json({ message: "Content deleted successfully" });
+  } catch (error) {
+    console.log("Error deleting content:", error);
+    res.status(500).json({ error: "Failed to delete content" });
+  }
+});
+
 export default r;
