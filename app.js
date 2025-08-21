@@ -14,12 +14,17 @@ import ratingRoutes from "./modules/rating/rating.route.js";
 import contentsRoute from "./modules/admin/video_routes/contenets.route.js";
 import favouriteRoutes from "./modules/Favourite/favourite.route.js";
 import adminSettingsRoutes from "./modules/admin/settings/admin_settigns.route.js";
-import supportRoutes from './modules/helpSupport/support.route.js'; 
+import supportRoutes from "./modules/helpSupport/support.route.js";
 //Import Swagger spec and UI
 import { swaggerSpec } from "./swagger/index.js";
 import swaggerUi from "swagger-ui-express";
 import { sendEmail } from "./utils/mailService.js";
 import { emailUnsuspendUser } from "./constants/email_message.js";
+import dotenv from "dotenv";
+import session from "express-session";
+import passport from "./config/passport.js"; 
+
+dotenv.config();
 
 const app = express();
 const prisma = new PrismaClient();
@@ -48,6 +53,19 @@ app.use(
     credentials: true,
   })
 );
+
+// Session middleware 
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || "your_secret_key",
+    resave: false,
+    saveUninitialized: false,
+    cookie: { secure: process.env.NODE_ENV === "production" },
+  })
+);
+
+app.use(passport.initialize());
+app.use(passport.session());
 
 //--------------Cron job for subscription cleanup-------------------
 let counter = 0;
@@ -101,7 +119,7 @@ nodeCron.schedule("0 0 * * *", async () => {
 
 //-----------------Cron job for unsuspend users----------------------
 nodeCron.schedule("0 0 * * *", async () => {
-  console.log("Cron job triggered at:", new Date().toISOString()); 
+  console.log("Cron job triggered at:", new Date().toISOString());
   try {
     const now = new Date();
     console.log(
@@ -120,20 +138,18 @@ nodeCron.schedule("0 0 * * *", async () => {
     if (usersToUpdate.length > 0) {
       console.log(`Found ${usersToUpdate.length} users to unsuspend.`);
 
-
       await prisma.user.updateMany({
         where: { id: { in: usersToUpdate.map((user) => user.id) } },
         data: { status: "active", suspend_endTime: null },
       });
 
-
       for (const user of usersToUpdate) {
-        const emailContent = emailUnsuspendUser(user.email); 
+        const emailContent = emailUnsuspendUser(user.email);
         await sendEmail(
           user.email,
           "Your Account Has Been Reactivated",
           emailContent
-        ); 
+        );
         console.log(`Email sent to ${user.email}`);
       }
 
@@ -152,7 +168,6 @@ nodeCron.schedule("0 0 * * *", async () => {
     const now = new Date();
     console.log(`Cron job running at: ${now.toISOString()}`);
 
-    
     const usersToUpdate = await prisma.user.findMany({
       where: {
         status: "deactivated",
@@ -172,9 +187,8 @@ nodeCron.schedule("0 0 * * *", async () => {
         },
       });
 
-      
       for (const user of usersToUpdate) {
-        const emailContent = emailReactivateUser(user.email); 
+        const emailContent = emailReactivateUser(user.email);
         await sendEmail(
           user.email,
           "Your Account Has Been Reactivated",
