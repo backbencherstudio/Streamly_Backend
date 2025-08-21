@@ -12,6 +12,7 @@ import {
   getMe,
   googleLogin,
   authenticateUser,
+  updatePassword
 } from "./user.controller.js";
 import { upload } from "../../config/Multer.config.js";
 import { verifyUser } from "../../middlewares/verifyUsers.js";
@@ -65,4 +66,6 @@ router.post("/sende-mail", verifyUser("USER"), sendMailToAdmin);
 
 //get me
 router.get("/get-me",authenticateUser, getMe);
+//update pass
+router.put('/updatePass', authenticateUser ,updatePassword )
 export default router;
