@@ -6,7 +6,6 @@ import {
 import { sendEmail } from "../../../utils/mailService.js";
 
 const prisma = new PrismaClient();
-
 export const getAllUsers = async (req, res) => {
   try {
     const users = await prisma.user.findMany({
@@ -43,7 +42,6 @@ export const getAllUsers = async (req, res) => {
     console.log("Error fetching users:", err);
   }
 };
-
 export const deleteUser = async (req, res) => {
   const { id } = req.params;
   console.log("id:", id);
@@ -57,7 +55,6 @@ export const deleteUser = async (req, res) => {
     console.log("Error deleting user:", err);
   }
 };
-
 export const suspendUser = async (req, res) => {
   const { id } = req.params;
   const { suspend_endTime } = req.body;
@@ -77,7 +74,6 @@ export const suspendUser = async (req, res) => {
     console.log("Error suspending user:", err);
   }
 };
-
 export const unsuspendUser = async (req, res) => {
   const { id } = req.params;
 
@@ -96,7 +92,6 @@ export const unsuspendUser = async (req, res) => {
     console.log("Error unsuspending user:", err);
   }
 };
-
 export const totalUsers = async (req, res) => {
   try {
     const count = await prisma.user.count();
@@ -106,7 +101,6 @@ export const totalUsers = async (req, res) => {
     console.log("Error fetching total users:", err);
   }
 };
-
 // get one user by id
 export const getUserById = async (req, res) => {
   const { id } = req.params;
@@ -121,6 +115,14 @@ export const getUserById = async (req, res) => {
         status: true,
         role: true,
         created_at: true,
+        address: true,
+        country: true,
+        gender: true,
+        date_of_birth: true,
+        phone_number: true,
+        city: true,
+        state: true,
+        postal_code: true,
         updated_at: true,
         Subscription: {
           select: {

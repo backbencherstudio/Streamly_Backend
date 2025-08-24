@@ -511,6 +511,8 @@ model HelpSupport {
   updated_at DateTime  @default(now())
   deleted_at DateTime?
 
+  username String?
+  email    String?
   user_id String?
   user    User?   @relation(fields: [user_id], references: [id])
 

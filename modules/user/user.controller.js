@@ -3,6 +3,7 @@ import validator from "validator";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { PrismaClient } from "@prisma/client";
+import { userIdSocketMap } from "../../utils/notificationService.js";
 import {
   generateOTP,
   receiveEmails,
@@ -12,6 +13,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import passport from "../../config/passport.js"; // Import the configured passport instance
+import { sendNotification, sendWelcomeNotification } from "../../utils/notificationService.js";
 
 const prisma = new PrismaClient();
 dotenv.config();
@@ -49,7 +51,10 @@ export const getMe = async (req, res) => {
         city: true,
         postal_code: true,
         bio: true,
-        
+        address: true,
+        country: true,
+        state: true,
+
 
 
       },
@@ -84,26 +89,44 @@ export const getMe = async (req, res) => {
 export const registerUser = async (req, res) => {
   try {
     const { email, password, name } = req.body;
+
+    // Input validation
     if (!email || !password || !name) {
       return res.status(400).json({ message: "All fields are required" });
     }
+
     if (!isEmail(email)) {
       return res.status(400).json({ message: "Invalid email format" });
     }
+
+    if (password.length < 8) {
+      return res.status(400).json({ message: "Password must be at least 8 characters long" });
+    }
+
+    if (name.length < 3) {
+      return res.status(400).json({ message: "Name must be at least 3 characters long" });
+    }
+
+    // Check if user already exists
     const existingUser = await prisma.user.findUnique({
       where: { email },
     });
     if (existingUser) {
       return res.status(400).json({ message: "Email already registered" });
     }
+
+    // Hash password and create new user
     const hashedPassword = await hashPassword(password);
-    await prisma.user.create({
+    const newUser = await prisma.user.create({
       data: {
         email,
         password: hashedPassword,
         name,
       },
     });
+
+    // Send the welcome notification
+    await sendWelcomeNotification(newUser.id, newUser.name);
 
     return res.status(201).json({
       success: true,
@@ -143,7 +166,7 @@ export const loginUser = async (req, res) => {
     if (user.status === "deactivated") {
       return res.status(403).json({
         message:
-          "Your account is deactivated. Please activate your account to log in.",
+          "deactivated",
       });
     }
 
@@ -165,10 +188,6 @@ export const loginUser = async (req, res) => {
       return res.status(401).json({ message: "Invalid password" });
     }
 
-    console.log("User ID", user.id, "password matched");
-
-    console.log("User ID", user.id, "password matched");
-
 
     const token = jwt.sign(
       { userId: user.id, email: user.email, role: user.role, type: user.type },
@@ -176,7 +195,6 @@ export const loginUser = async (req, res) => {
       { expiresIn: "100d" }
     );
 
-    console.log("Token expires at:", token);
 
     if (user.status === "deactivated") {
       return res.status(403).json({
@@ -184,15 +202,16 @@ export const loginUser = async (req, res) => {
       });
     }
 
+  
+    //connect user to socket
+    await sendNotification(user.id, "You have successfully logged in.");
+    
+
     return res.status(200).json({
       success: true,
       message: "Login successful",
       user: {
         id: user.id,
-        name: user.name,
-        email: user.email,
-        createdAt: user.created_at,
-        updatedAt: user.updated_at,
         role: user.role,
       },
       token,
@@ -205,7 +224,6 @@ export const loginUser = async (req, res) => {
     });
   }
 };
-
 //---------------------forgot password--------------------
 // Forgot password OTP send
 export const forgotPasswordOTPsend = async (req, res) => {
@@ -315,7 +333,6 @@ export const verifyForgotPasswordOTP = async (req, res) => {
     token: jwtToken,
   });
 };
-
 // Reset password
 export const resetPassword = async (req, res) => {
   const { newPassword } = req.body;
@@ -443,7 +460,6 @@ export const updateImage = async (req, res) => {
     });
   }
 };
-
 //update user details
 export const updateUserDetails = async (req, res) => {
   try {
@@ -496,7 +512,6 @@ export const updateUserDetails = async (req, res) => {
       .json({ message: "Internal Server Error", error: error.message });
   }
 };
-
 //change password
 export const changePassword = async (req, res) => {
   try {
@@ -518,6 +533,7 @@ export const changePassword = async (req, res) => {
     });
 
     if (!user) {
+      GoogleStrategy
       return res.status(404).json({ message: "User not found" });
     }
 
@@ -611,31 +627,35 @@ export const sendMailToAdmin = async (req, res) => {
 
 //----------- google login via using passport js ------------------
 export const googleLogin = (req, res) => {
-  passport.authenticate("google", { scope: ["profile", "email"] })(req, res);
+  const data = passport.authenticate("google", { scope: ["profile", "email"] })(req, res);
 };
-
 export const googleCallback = (req, res) => {
-  passport.authenticate(
-    "google",
-    { failureRedirect: "/login" },
-    (err, userInfo) => {
-      if (err || !userInfo) {
-        return res
-          .status(500)
-          .json({ message: "Google authentication failed", error: err });
-      }
-
-      const { user, token } = userInfo;
-
-      res.status(200).json({
-        message: "Google login successful",
-        user,
-        token,
-      });
+  passport.authenticate("google", { failureRedirect: "/login" }, async (err, userInfo) => {
+    if (err || !userInfo) {
+      console.error("Authentication Error: ", err);
+      return res.status(500).json({ message: "Google authentication failed", error: err });
     }
-  )(req, res);
-};
 
+    const { user, token } = userInfo;
+    // console.log("Authenticated user:", user);
+    // console.log("User token:", token);
+
+    if (!user || !user.id) {
+      return res.status(400).json({ message: "User not found after authentication" });
+    }
+
+    // Sign JWT token
+    const signedToken = jwt.sign({ userId: user.id, email: user.email, role: user.role }, process.env.JWT_SECRET, { expiresIn: '1h' });
+
+    const existingUser = await prisma.user.findUnique({ where: { id: user.id } });
+    if (!existingUser) {
+      console.log("User not found in the database, creating new user...");
+    }
+
+    // Redirect to the frontend with the token
+    res.redirect(`http://localhost:3000/auth?token=${signedToken}`);
+  })(req, res);
+};
 //update passss
 export const updatePassword = async (req, res) => {
   try {
@@ -651,7 +671,7 @@ export const updatePassword = async (req, res) => {
 
 
     const user = await prisma.user.findUnique({
-      where: { id: userId},
+      where: { id: userId },
     });
     if (!user) {
       return res.status(404).json({ message: "User not found" });

@@ -1,8 +1,6 @@
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
-
 dotenv.config();
-
 export const verifyUser = (...allowedRoles) => {
   return (req, res, next) => {
     const authHeader = req.headers["authorization"];
@@ -20,7 +18,6 @@ export const verifyUser = (...allowedRoles) => {
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       req.user = decoded;
-      // console.log(req.user);
 
       if (
         allowedRoles.length &&
