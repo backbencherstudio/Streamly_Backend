@@ -1,14 +1,16 @@
 import { PrismaClient } from "@prisma/client";
-import express from "express";
 import app from "./app.js";
 import { spawn } from 'node:child_process';
+
+
+
 
 const PORT = process.env.PORT || 4005;
 
 const prisma = new PrismaClient();
 const worker = spawn(process.execPath, ['./modules/workers/media.worker.js'], {
   stdio: 'inherit',
-  env: process.env, 
+  env: process.env,
 });
 
 app.listen(PORT, async () => {

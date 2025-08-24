@@ -51,7 +51,6 @@ export const deactivateAccount = async (req, res) => {
     res.status(500).json({ error: "Failed to deactivate account" });
   }
 };
-
 //---------------------activate user account-------------------
 export const activateUser = async (req, res) => {
   const { email, password } = req.body;
@@ -84,7 +83,7 @@ export const activateUser = async (req, res) => {
 
     res.json({ message: "User account activated successfully" });
 
-    const emailContent = emailReactivateUser(user.email, deactivationPeriod);
+    const emailContent = emailReactivateUser(user.email);
     await sendEmail(
       user.email,
       "Account Deactivation Notification",
@@ -95,7 +94,6 @@ export const activateUser = async (req, res) => {
     res.status(500).json({ error: "Failed to activate account" });
   }
 };
-
 //--------------------delete account permanently-------------------
 export const deleteAccount = async (req, res) => {
   const { userId } = req.params;

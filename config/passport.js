@@ -1,10 +1,8 @@
-// passport.js
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { PrismaClient } from "@prisma/client";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
-
 dotenv.config();
 const prisma = new PrismaClient();
 
@@ -14,6 +12,8 @@ passport.use(
       clientID: process.env.GOOGLE_APP_ID,
       clientSecret: process.env.GOOGLE_APP_SECRET,
       callbackURL: process.env.GOOGLE_CALLBACK_URL,
+              grant_type: 'authorization_code',
+
     },
     async (accessToken, refreshToken, profile, done) => {
       try {
@@ -49,11 +49,9 @@ passport.use(
     }
   )
 );
-
 passport.serializeUser((user, done) => {
   done(null, user);
 });
-
 passport.deserializeUser((user, done) => {
   done(null, user);
 });

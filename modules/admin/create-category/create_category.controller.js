@@ -15,7 +15,6 @@ const buildLocalUrl = (filePath) => {
   if (!filePath) return null;
   return `http://localhost:9000/${filePath}`;
 };
-
 export const createService = async (req, res) => {
   try {
     const { name, description, price, features, plan } = req.body;
@@ -46,7 +45,6 @@ export const createService = async (req, res) => {
       .json({ message: "Internal Server Error", error: error.message });
   }
 };
-
 export const getAllServices = async (req, res) => {
   try {
     const services = await prisma.services.findMany({
@@ -64,8 +62,6 @@ export const getAllServices = async (req, res) => {
       .json({ message: "Internal Server Error", error: error.message });
   }
 };
-
-
 export const createCategory = async (req, res) => {
   
   try {
@@ -87,7 +83,6 @@ export const createCategory = async (req, res) => {
       .json({ message: "Internal Server Error", error: error.message });
   }
 };
-
 export const getCategories = async (req, res) => {
   try {
     const categories = await prisma.category.findMany({
@@ -100,7 +95,6 @@ export const getCategories = async (req, res) => {
       .json({ message: "Internal Server Error", error: error.message });
   }
 };
-
 export const getCategoryById = async (req, res) => {
   const { id } = req.params;
   try {
@@ -117,7 +111,6 @@ export const getCategoryById = async (req, res) => {
       .json({ message: "Internal Server Error", error: error.message });
   }
 };
-
 export const updateCategory = async (req, res) => {
   console.log("this is the update category");
   try {
@@ -134,7 +127,6 @@ export const updateCategory = async (req, res) => {
       .json({ message: "Internal Server Error", error: error.message });
   }
 };
-
 export const deleteCategory = async (req, res) => {
   try {
     const { id } = req.params;

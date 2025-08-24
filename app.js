@@ -1,4 +1,5 @@
 import express from "express";
+import { Server } from "socket.io";
 import cors from "cors";
 import morgan from "morgan";
 import { fileURLToPath } from "url";
@@ -15,45 +16,63 @@ import contentsRoute from "./modules/admin/video_routes/contenets.route.js";
 import favouriteRoutes from "./modules/Favourite/favourite.route.js";
 import adminSettingsRoutes from "./modules/admin/settings/admin_settigns.route.js";
 import supportRoutes from "./modules/helpSupport/support.route.js";
-//Import Swagger spec and UI
 import { swaggerSpec } from "./swagger/index.js";
 import swaggerUi from "swagger-ui-express";
 import { sendEmail } from "./utils/mailService.js";
 import { emailUnsuspendUser } from "./constants/email_message.js";
 import dotenv from "dotenv";
+import { setSocketServer } from "./utils/notificationService.js";
 import session from "express-session";
 import passport from "./config/passport.js"; 
-
+import http from 'http';  
 dotenv.config();
 
 const app = express();
+const server = http.createServer(app);
 const prisma = new PrismaClient();
 app.set("json replacer", (key, value) =>
   typeof value === "bigint" ? value.toString() : value
 );
-
 BigInt.prototype.toJSON = function () {
   return this.toString();
 };
+//----------------------initialize socket.io----------------------
+export const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    credentials: true,
+  },
+});
+setSocketServer(io);
+
 //Swagger UI route
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-
 app.use(
   cors({
     origin: [
-      "http://192.168.30.102:3000",
+      "http://localhost:3001",
+      "http://192.168.4.42:3000",
+      "http://192.168.4.42:3000/auth/google/callback",
       "http://localhost:5173",
+      "http://192.168.4.42:3000",
       "http://localhost:3000",
+       "http://localhost:3000/auth",
+      "http://192.168.4.42:3000/auth",
+      "https://accounts.google.com/o/oauth2/v2/auth",
       "http://localhost:8080",
       "http://127.0.0.1:5500",
       "https://f7acfea4e102.ngrok-free.app",
+      "https://decisions-spanish-protecting-anime.trycloudflare.com/api/users/auth/google/callback",
+      "https://decisions-spanish-protecting-anime.trycloudflare.com",
     ],
-    methods: ["GET", "POST", "PUT", "DELETE"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    // allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", ],
     credentials: true,
+    preflightContinue: true,
+    optionsSuccessStatus: 204,
   })
 );
-
 // Session middleware 
 app.use(
   session({
@@ -63,9 +82,9 @@ app.use(
     cookie: { secure: process.env.NODE_ENV === "production" },
   })
 );
-
 app.use(passport.initialize());
 app.use(passport.session());
+
 
 //--------------Cron job for subscription cleanup-------------------
 let counter = 0;
@@ -256,4 +275,4 @@ app.use((err, req, res, next) => {
 
 app.use(express.static(path.join(__dirname, "public")));
 
-export default app;
+export default server;

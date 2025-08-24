@@ -24,14 +24,12 @@ for (const k of ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_S3_BUCKET'])
     console.warn(`[env] Missing ${k} — S3 uploads will fail.`);
   }
 }
-
 function secsToTimestamp(s) {
   const h = String(Math.floor(s / 3600)).padStart(2, '0');
   const m = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
   const sec = String(Math.floor(s % 60)).padStart(2, '0');
   return `${h}:${m}:${sec}.000`;
 }
-
 async function markFailed(contentId, reason) {
   try {
     await prisma.content.update({
@@ -45,7 +43,6 @@ async function markFailed(contentId, reason) {
     });
   }
 }
-
 async function generateChecksum(localPath) {
   return new Promise((resolve, reject) => {
     const h = crypto.createHash('sha256');

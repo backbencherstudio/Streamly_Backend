@@ -123,8 +123,11 @@ export const handleWebhook = async (req, res) => {
 const handlePaymentIntentSucceeded = async (paymentIntent) => {
   const { user_id, service_id, plan } = paymentIntent.metadata;
   console.log(`Processing payment intent for user ${user_id} with service ${service_id} and plan ${plan}`);
-  
+ 
+  await sendNotification(`${user_id}, "Your payment was successful and your subscription is now active. your plan is ${plan} , Enjoy our premium features!"`);
+  await sendNotification('cme7zzhds0000venwlry4129y', `New subscription: User ${user_id} subscribed to service ${service_id} with plan ${plan}.`);
 
+ 
   if (!user_id) {
     console.error('User ID not found in payment intent metadata.');
     return;
@@ -357,7 +360,7 @@ export const getAvgSubsctiptionValue = async (req, res) => {
       : 0;
 
       if (avgSubscriptionValue === 0) {
-        return res.status(201).json({ message: 'No active subscriptions found' });
+        return res.status(201).json({ message: '0' });
       }
 
     res.json({ avgSubscriptionValue });

@@ -10,8 +10,8 @@ import {
   changePassword,
   sendMailToAdmin,
   getMe,
-  googleLogin, // Google login controller
-  googleCallback, // Google callback controller
+  googleLogin, 
+  googleCallback,
   authenticateUser,
   updatePassword
 } from "./user.controller.js";

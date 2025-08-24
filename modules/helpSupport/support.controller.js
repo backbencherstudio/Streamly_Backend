@@ -18,6 +18,8 @@ export const createSupportTicket = async (req, res) => {
       data: {
         user_id: user?.userId,
         subject,
+        username: user?.name,
+        email: user?.email,
         description,
       },
     });
