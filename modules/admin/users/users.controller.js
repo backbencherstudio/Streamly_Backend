@@ -117,6 +117,7 @@ export const getUserById = async (req, res) => {
         created_at: true,
         address: true,
         country: true,
+        avatar: true,
         gender: true,
         date_of_birth: true,
         phone_number: true,

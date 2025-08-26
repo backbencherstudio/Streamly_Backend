@@ -49,11 +49,14 @@ export const createSupportTicket = async (req, res) => {
     return res.status(500).json({ message: "Internal Server Error" });
   }
 };
-
 //-------------------get all tickets-------------------
 export const getAllTickets = async (req, res) => {
   try {
-    const tickets = await prisma.helpSupport.findMany();
+    const tickets = await prisma.helpSupport.findMany(
+      {
+        orderBy: { created_at: "desc" },
+      }
+    );
     return res.status(200).json({
       success: true,
       tickets,
@@ -63,7 +66,6 @@ export const getAllTickets = async (req, res) => {
     return res.status(500).json({ message: "Internal Server Error" });
   }
 };
-
 //-------------------solve ticket-------------------
 export const solveTicket = async (req, res) => {
   try {

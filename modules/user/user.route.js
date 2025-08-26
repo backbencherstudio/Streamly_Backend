@@ -13,7 +13,8 @@ import {
   googleLogin, 
   googleCallback,
   authenticateUser,
-  updatePassword
+  updatePassword,
+  getAllNotifications
 } from "./user.controller.js";
 import { upload } from "../../config/Multer.config.js";
 import { verifyUser } from "../../middlewares/verifyUsers.js";
@@ -78,10 +79,12 @@ router.put(
 );
 
 // Support
-router.post("/sende-mail", verifyUser("USER"), sendMailToAdmin);
+router.post("/sende-mail", verifyUser("normal"), sendMailToAdmin);
 
 //get me
 router.get("/get-me",authenticateUser, getMe);
-//update pass
+//update pass;
 router.put('/updatePass', authenticateUser ,updatePassword )
+
+router.get('/getAllNotifications', authenticateUser, getAllNotifications);
 export default router;

@@ -66,6 +66,12 @@ export const getFavourites = async (req, res) => {
     const favourites = await prisma.favourite.findMany({
       where: { user_id: userId },
       include: {
+        category:{
+          select: {
+            id: true,
+            name: true,
+          },
+        },
         content: {
           select: {
             id: true,

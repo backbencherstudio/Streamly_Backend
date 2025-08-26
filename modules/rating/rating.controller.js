@@ -118,10 +118,10 @@ export const topRatedContentThisWeek = async (req, res) => {
           rating: 'desc', 
         },
       },
-      take: 3, 
+      take: 10, 
       where: {
         created_at: {
-          gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // Last 7 days
+          gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
         },
       },
     });

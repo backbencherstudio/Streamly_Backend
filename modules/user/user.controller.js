@@ -701,3 +701,107 @@ export const updatePassword = async (req, res) => {
     return res.status(500).json({ message: "Internal Server Error", error: error.message });
   }
 }
+
+
+// notification controller
+// //delete one notification
+// export const deleteNotification = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     const userId = req.user?.userId;
+
+//     if (!userId) {
+//       return res.status(400).json({ message: "User not authenticated" });
+//     }
+
+//     const notification = await prisma.notification.findUnique({
+//       where: { id: id },
+//     });
+
+//     if (!notification) {
+//       return res.status(404).json({ message: "Notification not found" });
+//     }
+
+//     if (notification.receiver_id !== userId) {
+//       return res.status(403).json({ message: "You are not authorized to delete this notification" });
+//     }
+
+//     await prisma.notification.delete({
+//       where: { id: id },
+//     });
+
+//     return res.status(200).json({ message: "Notification deleted successfully" });
+//   } catch (error) {
+//     console.error("Error deleting notification:", error);
+//     return res.status(500).json({ message: "Internal Server Error", error: error.message });
+//   } 
+// };
+//get all notification
+export const getAllNotifications = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      return res.status(400).json({ message: "User not authenticated" });
+    }
+
+    const notifications = await prisma.notification.findMany({
+      where: { receiver_id: userId },
+      include:{
+        notification_event:{
+          select:{
+            text: true,
+            status: true,
+          }
+        }
+      },
+      orderBy: { created_at: "desc" },
+    });
+
+    if(notifications.length === 0){
+      return res.status(200).json({
+        success: true,
+        message: "No notifications found",
+        data: [],
+      });
+    }
+
+   let formatedNotifications = notifications.map((notification) => ({
+      id: notification.id,
+      sender_id: notification.sender_id,
+      receiver_id: notification.receiver_id,
+      text: notification.notification_event?.text || "",
+      status: notification.notification_event?.status || "",
+      created_at: notification.created_at,
+      updated_at: notification.updated_at,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      message: "Notifications retrieved successfully",
+      data: formatedNotifications,
+    });
+  } catch (error) {
+    console.error("Error fetching notifications:", error);
+    return res.status(500).json({ message: "Internal Server Error", error: error.message });
+  }
+};
+// //delete all notification
+// export const deleteAllNotifications = async (req, res) => {
+//   try {
+//     const userId = req.user?.userId;
+
+//     if (!userId) {
+//       return res.status(400).json({ message: "User not authenticated" });
+//     }
+
+//     await prisma.notification.deleteMany({
+//       where: { receiver_id: userId },
+//     });
+
+//     return res.status(200).json({ message: "All notifications deleted successfully" });
+//   } catch (error) {
+//     console.error("Error deleting all notifications:", error);
+//     return res.status(500).json({ message: "Internal Server Error", error: error.message });
+//   }
+// }
