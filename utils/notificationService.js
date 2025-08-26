@@ -28,6 +28,11 @@ const initializeSocketEvents = () => {
             socket.join(userId);
             console.log(`User ${userId} joined room: ${userId}`);
 
+
+            // socket.on("notification", (userId)=>{
+            //    io.to(userId).emit("notification", { message: "This is a test notification", timestamp: new Date() });
+            // })
+
             socket.on("disconnect", () => {
                 console.log(`Socket ${socket.id} disconnected for user ${userId}`);
                 delete userIdSocketMap[userId];

@@ -79,6 +79,56 @@ r.get("/allContents", verifyUser("admin"), async (req, res) => {
   }
 });
 
+//--------------------latest contents-------------------
+r.get("/latestContents", async (req, res) => {
+  try {
+    const contents = await prisma.content.findMany({
+      orderBy: {
+        created_at: "desc",
+      },
+      take: 4, 
+      include: {
+        category: {
+          select: {
+            name: true,
+          },
+        },
+      },
+    });
+
+    const formattedContents = contents.map((content) => {
+      const videoUrl =
+        buildS3Url(content.s3_bucket, content.s3_key) ||
+        buildLocalUrl(content.video);
+      const thumbnailUrl =
+        buildS3Url(content.s3_bucket, content.s3_thumb_key) ||
+        buildLocalUrl(content.thumbnail);
+
+      return {
+        id: content.id,
+        title: content.title,
+        genre: content.genre,
+        category: {
+          name: content.category.name,
+        },
+        type: content.type,
+        file_size_bytes: content.file_size_bytes,
+        status: content.status,
+        content_status: content.content_status,
+        created_at: content.created_at,
+        view_count: content.view_count,
+        video: videoUrl,
+        thumbnail: thumbnailUrl,
+      };
+    });
+
+    res.json({ contents: formattedContents });
+  } catch (error) {
+    console.error("Error fetching latest contents:", error);
+    res.status(500).json({ error: "Failed to fetch latest contents" });
+  }
+});
+
 r.get("/:id", verifyUser("admin"), async (req, res) => {
   const { id } = req.params;
   try {
@@ -281,5 +331,7 @@ r.delete("/:id", verifyUser("admin"), async (req, res) => {
     res.status(500).json({ error: "Failed to delete content" });
   }
 });
+
+
 
 export default r;

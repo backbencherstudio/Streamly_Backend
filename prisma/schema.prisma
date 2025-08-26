@@ -141,27 +141,36 @@ model UserSetting {
 }
 
 model PaymentTransaction {
-  id         String    @id @default(cuid())
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
-  deleted_at DateTime?
-  status     String?   @default("pending")
+  id           String    @id @default(cuid())
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt           
+  deleted_at   DateTime?
+  status       String    @default("pending")   // "pending" | "requires_action" | "succeeded" | "failed" | "canceled"
 
-  user_id String?
-  user    User?   @relation(fields: [user_id], references: [id])
+  // --- Relations ---
+  user_id         String?
+  user            User?        @relation(fields: [user_id], references: [id])
 
   subscription_id String?
   subscription    Subscription? @relation(fields: [subscription_id], references: [id])
 
-  provider String? 
-  price           Decimal? 
-  currency         String?
-  paid_amount      Decimal?
-  paid_currency    String?
-  payment_method  String?
+  // --- Stripe / Provider identifiers (🔒 make processing idempotent & auditable) ---
+  provider                     String?   
+  provider_payment_intent_id   String?   @unique   
+  provider_charge_id           String?              
+  provider_customer_id         String?              
+  provider_payment_method_id   String?              
+
+  // --- Financials ---
+  price          Decimal?  // your major-unit price at time of purchase (e.g., 9.99)
+  currency       String?   // e.g., "usd"
+  paid_amount    Decimal?  // actual captured amount in major units (e.g., 9.99)
+  paid_currency  String?   // e.g., "usd"
+  payment_method String?   // duplicate of pm id for convenience/audit
 
   @@map("payment_transactions")
 }
+
 
 model NotificationEvent {
   id         String    @id @default(cuid())
