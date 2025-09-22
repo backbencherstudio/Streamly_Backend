@@ -65,6 +65,7 @@ app.use(
       "https://f7acfea4e102.ngrok-free.app",
       "https://decisions-spanish-protecting-anime.trycloudflare.com/api/users/auth/google/callback",
       "https://decisions-spanish-protecting-anime.trycloudflare.com",
+      "https://susdent-dashboard-f11o.vercel.app"
     ],
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
     // allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", ],
