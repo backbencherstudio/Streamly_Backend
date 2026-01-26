@@ -231,4 +231,197 @@ export const getContentsByGenre = async (req, res) => {
   }
 };
 
+//----------------------get popular categories----------------------
+export const getPopularCategories = async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 10, 50);
+
+    // Get categories with aggregated content metrics
+    const categoriesWithMetrics = await prisma.category.findMany({
+      include: {
+        _count: {
+          select: { contents: true },
+        },
+      },
+      where: {
+        contents: {
+          some: {},
+        },
+      },
+      orderBy: [
+        { contents: { _count: "desc" } },
+      ],
+      take: limit,
+    });
+
+    // Calculate detailed metrics for each category
+    const popularCategories = await Promise.all(
+      categoriesWithMetrics.map(async (category) => {
+        const contentInCategory = await prisma.content.findMany({
+          where: { category_id: category.id },
+          include: {
+            Rating: {
+              select: {
+                rating: true,
+              },
+            },
+          },
+        });
+
+        const totalViews = contentInCategory.reduce(
+          (sum, c) => sum + (c.view_count || 0),
+          0
+        );
+        
+        const avgRating =
+          contentInCategory.length > 0
+            ? contentInCategory.reduce((sum, c) => {
+                const contentRatings = c.Rating || [];
+                const contentAvgRating = contentRatings.length > 0
+                  ? contentRatings.reduce((rSum, r) => rSum + (r.rating || 0), 0) / contentRatings.length
+                  : 0;
+                return sum + contentAvgRating;
+              }, 0) / contentInCategory.length
+            : 0;
+        const totalContent = contentInCategory.length;
+        const recentContent = contentInCategory.filter(
+          (c) =>
+            new Date(c.created_at) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+        ).length;
+
+        // Calculate popularity score (weighted formula)
+        const popularityScore =
+          totalContent * 10 +
+          totalViews * 0.1 +
+          avgRating * 100 +
+          recentContent * 15;
+
+        return {
+          id: category.id,
+          name: category.name,
+          slug: category.slug,
+          status: category.status,
+          metrics: {
+            total_content: totalContent,
+            total_views: totalViews,
+            avg_rating: parseFloat(avgRating.toFixed(2)),
+            recent_content_30days: recentContent,
+            popularity_score: parseFloat(popularityScore.toFixed(2)),
+          },
+          created_at: category.created_at,
+          updated_at: category.updated_at,
+        };
+      })
+    );
+
+    // Sort by popularity score
+    popularCategories.sort(
+      (a, b) => b.metrics.popularity_score - a.metrics.popularity_score
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: popularCategories,
+      count: popularCategories.length,
+    });
+  } catch (error) {
+    console.error("Error fetching popular categories:", error);
+    return res
+      .status(500)
+      .json({ message: "Internal Server Error", error: error.message });
+  }
+};
+
+//----------------------get trending categories (new in last 7 days)----------------------
+export const getTrendingCategories = async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 10, 50);
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    // Find categories with recent content
+    const trendingCategories = await prisma.category.findMany({
+      include: {
+        contents: {
+          where: {
+            created_at: {
+              gte: sevenDaysAgo,
+            },
+          },
+          include: {
+            Rating: {
+              select: {
+                rating: true,
+              },
+            },
+          },
+        },
+        _count: {
+          select: { contents: true },
+        },
+      },
+      where: {
+        contents: {
+          some: {
+            created_at: {
+              gte: sevenDaysAgo,
+            },
+          },
+        },
+      },
+      take: limit,
+    });
+
+    const trendingData = trendingCategories
+      .map((category) => {
+        const newContentCount = category.contents.length;
+        const viewsOnNewContent = category.contents.reduce(
+          (sum, c) => sum + (c.view_count || 0),
+          0
+        );
+        
+        const avgRatingNewContent =
+          newContentCount > 0
+            ? category.contents.reduce((sum, c) => {
+                const contentRatings = c.Rating || [];
+                const contentAvgRating = contentRatings.length > 0
+                  ? contentRatings.reduce((rSum, r) => rSum + (r.rating || 0), 0) / contentRatings.length
+                  : 0;
+                return sum + contentAvgRating;
+              }, 0) / newContentCount
+            : 0;
+
+        const trendScore =
+          newContentCount * 20 + viewsOnNewContent * 0.2 + avgRatingNewContent * 50;
+
+        return {
+          id: category.id,
+          name: category.name,
+          slug: category.slug,
+          status: category.status,
+          metrics: {
+            total_content: category._count.contents,
+            new_content_7days: newContentCount,
+            views_on_new: viewsOnNewContent,
+            avg_rating_new: parseFloat(avgRatingNewContent.toFixed(2)),
+            trend_score: parseFloat(trendScore.toFixed(2)),
+          },
+          created_at: category.created_at,
+          updated_at: category.updated_at,
+        };
+      })
+      .sort((a, b) => b.metrics.trend_score - a.metrics.trend_score);
+
+    return res.status(200).json({
+      success: true,
+      data: trendingData,
+      count: trendingData.length,
+    });
+  } catch (error) {
+    console.error("Error fetching trending categories:", error);
+    return res
+      .status(500)
+      .json({ message: "Internal Server Error", error: error.message });
+  }
+};
+
 

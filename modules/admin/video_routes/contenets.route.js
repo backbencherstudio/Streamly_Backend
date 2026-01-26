@@ -21,7 +21,7 @@ const buildS3Url = (bucket, key) => {
 // Helper function to build local file URL
 const buildLocalUrl = (file) => {
   const PUBLIC_BASE_URL =
-    process.env.PUBLIC_BASE_URL || "http://localhost:4005";
+    process.env.APP_URL || "http://localhost:4005";
   return file ? `${PUBLIC_BASE_URL}/uploads/${file}` : null;
 };
 // Route to get all contents
@@ -181,20 +181,36 @@ r.get("/:id", verifyUser("admin"), async (req, res) => {
   }
 });
 
-r.get("/getoneWithcat/:id", async (req, res) => {
-  const { id } = req.params;
+r.get("/getoneWithcat/:category", async (req, res) => {
+  const { category } = req.params;
 
   try {
+    // Find category by slug or name (case-insensitive)
+    const categoryData = await prisma.category.findFirst({
+      where: {
+        OR: [
+          { slug: { equals: category.toLowerCase() } },
+          { name: { equals: category, mode: 'insensitive' } },
+        ],
+      },
+    });
+
+    if (!categoryData) {
+      return res
+        .status(404)
+        .json({ message: `Category "${category}" not found` });
+    }
+
     const contents = await prisma.content.findMany({
       where: {
-        category_id: id,
+        category_id: categoryData.id,
       },
     });
 
     if (contents.length === 0) {
       return res
         .status(404)
-        .json({ message: `No content found for category ID ${id}` });
+        .json({ message: `No content found for category "${category}"` });
     }
 
     const formattedContents = contents.map((content) => {
@@ -224,21 +240,37 @@ r.get("/getoneWithcat/:id", async (req, res) => {
 
     res.json({ contents: formattedContents });
   } catch (error) {
-    console.error("Error fetching content by category ID:", error);
-    res.status(500).json({ error: "Failed to fetch content by category ID" });
+    console.error("Error fetching content by category:", error);
+    res.status(500).json({ error: "Failed to fetch content by category" });
   }
 });
 
 
 //--------------------getting popular contents by category-------------------
-r.get("/getPopularContents/:categoryId", async (req, res) => {
-  const { categoryId } = req.params;
+r.get("/getPopularContents/:category", async (req, res) => {
+  const { category } = req.params;
 
   try {
+    // Find category by slug or name (case-insensitive)
+    const categoryData = await prisma.category.findFirst({
+      where: {
+        OR: [
+          { slug: { equals: category.toLowerCase() } },
+          { name: { equals: category, mode: 'insensitive' } },
+        ],
+      },
+    });
+
+    if (!categoryData) {
+      return res
+        .status(404)
+        .json({ message: `Category "${category}" not found` });
+    }
+
     const ratings = await prisma.rating.findMany({
       where: {
         content: {
-          category_id: categoryId,
+          category_id: categoryData.id,
         },
       },
       select: {
@@ -253,7 +285,7 @@ r.get("/getPopularContents/:categoryId", async (req, res) => {
     if (ratings.length === 0) {
       return res
         .status(404)
-        .json({ message: `No content found for category ID ${categoryId}` });
+        .json({ message: `No content found for category "${category}"` });
     }
 
     const contentIds = ratings.map((rating) => rating.content_id);

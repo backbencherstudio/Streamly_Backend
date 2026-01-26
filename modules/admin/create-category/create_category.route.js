@@ -12,6 +12,8 @@ import {
   getAllGenres,
   getContentsByGenre,
   getCategoryById,
+  getPopularCategories,
+  getTrendingCategories,
 } from "./create_category.controller.js";
 import { get } from "http";
 import { verifyAdmin } from "../../../middlewares/verifyAdmin.js";
@@ -25,6 +27,10 @@ router.get("/categories", getCategories);
 router.get("/categories/:id", verifyAdmin, getCategoryById);
 router.put("/categories/:id", verifyAdmin, updateCategory);
 router.delete("/categories/:id", verifyAdmin, deleteCategory);
+
+// Category Analytics
+router.get("/popular", getPopularCategories);
+router.get("/trending", getTrendingCategories);
 
 // Existing service routes
 router.post("/create_service", createService);

@@ -13,6 +13,7 @@ import createRoutes from "./modules/admin/create-category/create_category.route.
 import usermanagementRoutes from "./modules/admin/users/users.route.js";
 import ratingRoutes from "./modules/rating/rating.route.js";
 import contentsRoute from "./modules/admin/video_routes/contenets.route.js";
+import userContentsRoute from "./modules/contents/contents.route.js";
 import favouriteRoutes from "./modules/Favourite/favourite.route.js";
 import adminSettingsRoutes from "./modules/admin/settings/admin_settigns.route.js";
 import supportRoutes from "./modules/helpSupport/support.route.js";
@@ -242,7 +243,9 @@ app.use(morgan("dev"));
 app.use("/api/users", userRoutes);
 app.use("/api/uploads", uploadsRoutes);
 app.use("/api/contents", contentsRoute);
+app.use("/api/contents/user", userContentsRoute);
 app.use("/api/payments", pay);
+app.use("/api/categories", createRoutes);
 app.use("/api/admin/categories", createRoutes);
 app.use("/api/admin/user", usermanagementRoutes);
 app.use("/api/admin/settings", adminSettingsRoutes);
