@@ -1,0 +1,244 @@
+{
+  "client": "Thunder Client",
+  "collectionName": "Streamly - Video Upload",
+  "dateExported": "2026-01-27",
+  "requests": [
+    {
+      "name": "Upload Movie",
+      "method": "POST",
+      "url": "{{base_url}}/api/admin/uploads/video",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{admin_token}}"
+        }
+      ],
+      "body": {
+        "type": "formdata",
+        "formdata": [
+          {
+            "name": "file",
+            "type": "file",
+            "value": "path/to/movie.mp4"
+          },
+          {
+            "name": "thumbnail",
+            "type": "file",
+            "value": "path/to/poster.jpg"
+          },
+          {
+            "name": "title",
+            "value": "The Dark Knight"
+          },
+          {
+            "name": "description",
+            "value": "When the menace known as the Joker wreaks havoc on Gotham"
+          },
+          {
+            "name": "genre",
+            "value": "action,crime,drama"
+          },
+          {
+            "name": "category_id",
+            "value": "YOUR_CATEGORY_ID"
+          },
+          {
+            "name": "content_type",
+            "value": "movie"
+          },
+          {
+            "name": "quality",
+            "value": "4k"
+          },
+          {
+            "name": "is_premium",
+            "value": "true"
+          },
+          {
+            "name": "release_date",
+            "value": "2008-07-18T00:00:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Upload Series Parent",
+      "method": "POST",
+      "url": "{{base_url}}/api/admin/uploads/video",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{admin_token}}"
+        }
+      ],
+      "body": {
+        "type": "formdata",
+        "formdata": [
+          {
+            "name": "file",
+            "type": "file",
+            "value": "path/to/series_trailer.mp4"
+          },
+          {
+            "name": "thumbnail",
+            "type": "file",
+            "value": "path/to/series_poster.jpg"
+          },
+          {
+            "name": "title",
+            "value": "Hip Hop Road Redemption"
+          },
+          {
+            "name": "description",
+            "value": "A journey through hip hop culture"
+          },
+          {
+            "name": "genre",
+            "value": "music,documentary"
+          },
+          {
+            "name": "category_id",
+            "value": "YOUR_CATEGORY_ID"
+          },
+          {
+            "name": "content_type",
+            "value": "series"
+          },
+          {
+            "name": "is_premium",
+            "value": "true"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Upload Episode S01E01",
+      "method": "POST",
+      "url": "{{base_url}}/api/admin/uploads/video",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{admin_token}}"
+        }
+      ],
+      "body": {
+        "type": "formdata",
+        "formdata": [
+          {
+            "name": "file",
+            "type": "file",
+            "value": "path/to/s01e01.mp4"
+          },
+          {
+            "name": "thumbnail",
+            "type": "file",
+            "value": "path/to/s01e01_thumb.jpg"
+          },
+          {
+            "name": "title",
+            "value": "Hip Hop Road Redemption - Episode 1"
+          },
+          {
+            "name": "description",
+            "value": "The beginning of the journey"
+          },
+          {
+            "name": "genre",
+            "value": "music,documentary"
+          },
+          {
+            "name": "category_id",
+            "value": "YOUR_CATEGORY_ID"
+          },
+          {
+            "name": "content_type",
+            "value": "episode"
+          },
+          {
+            "name": "series_id",
+            "value": "SERIES_CONTENT_ID_FROM_PREVIOUS_UPLOAD"
+          },
+          {
+            "name": "season_number",
+            "value": "1"
+          },
+          {
+            "name": "episode_number",
+            "value": "1"
+          },
+          {
+            "name": "is_premium",
+            "value": "true"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Upload Trailer",
+      "method": "POST",
+      "url": "{{base_url}}/api/admin/uploads/video",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{admin_token}}"
+        }
+      ],
+      "body": {
+        "type": "formdata",
+        "formdata": [
+          {
+            "name": "file",
+            "type": "file",
+            "value": "path/to/trailer.mp4"
+          },
+          {
+            "name": "thumbnail",
+            "type": "file",
+            "value": "path/to/trailer_thumb.jpg"
+          },
+          {
+            "name": "title",
+            "value": "Inception - Official Trailer"
+          },
+          {
+            "name": "genre",
+            "value": "action,sci_fi,thriller"
+          },
+          {
+            "name": "category_id",
+            "value": "YOUR_CATEGORY_ID"
+          },
+          {
+            "name": "content_type",
+            "value": "trailer"
+          },
+          {
+            "name": "trailer_for_id",
+            "value": "CONTENT_ID_OF_MOVIE_OR_SERIES_OR_EPISODE"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Get Upload Status",
+      "method": "GET",
+      "url": "{{base_url}}/api/admin/uploads/status/CONTENT_ID",
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {{admin_token}}"
+        }
+      ]
+    }
+  ],
+  "variables": [
+    {
+      "name": "base_url",
+      "value": "http://localhost:5000"
+    },
+    {
+      "name": "admin_token",
+      "value": "YOUR_JWT_TOKEN_HERE"
+    }
+  ]
+}

@@ -86,7 +86,7 @@ model User {
   HelpSupport           HelpSupport[]
   contentViews          ContentView[]
 
-  @@map("users ")
+  @@map("users")
 }
 
 model UserPaymentMethod {
@@ -276,18 +276,21 @@ model Favourite {
   created_at DateTime @default(now())
 
   content_id String?
-  content    Content? @relation(fields: [content_id], references: [id])
+  content    Content? @relation(fields: [content_id], references: [id], onDelete: Cascade)
 
   user_id String?
   user    User?   @relation(fields: [user_id], references: [id])
 
   category_id String?
-  category    Category? @relation(fields: [category_id], references: [id])
+  category    Category? @relation(fields: [category_id], references: [id], onDelete: Cascade)
 
   title       String?
   thumbnail   String? // optional public URL
   description String?
   rating      Int?    @default(0) // rating out of 5
+
+  @@unique([user_id, content_id])
+  @@map("favourites")
 }
 
 model Admin_settings {
@@ -332,24 +335,94 @@ enum Content_status {
 
 enum statusType {
   published
-  draft
+  pending
+  unpublished
+  archived
+  deleted
 }
 
+enum ContentType {
+  movie
+  series
+  episode
+  trailer
+  music_video
+}
+
+// model Content {
+//   id          String    @id @default(cuid())
+//   created_at  DateTime? @default(now())
+//   updated_at  DateTime? @updatedAt
+//   description String?
+
+//   title          String?
+//   genre          Genra?
+//   category_id    String?
+//   category       Category?      @relation(fields: [category_id], references: [id])
+//   content_type   String?
+//   duration       String? // or Int
+//   content_status Content_status @default(draft)
+
+//   storage_provider String? // "local" | "s3"
+//   s3_bucket        String?
+//   s3_key           String?
+//   s3_thumb_key     String?
+//   original_name    String?
+//   file_size_bytes  BigInt?
+//   etag             String?
+//   checksum_sha256  String?
+//   status           statusType? @default(published)
+//   type             String?     @default("4k")
+//   view_count       Int?        @default(0)
+
+//   thumbnail  String? // optional public URL
+//   video      String? // optional public URL
+//   is_premium Boolean? @default(false) // if true, only premium users can access this content
+
+//   // for series and episodes
+//   series_id      String?
+//   series_title   String?
+//   episode_title  String?
+//   season_number  Int?
+//   episode_number Int?
+
+//   release_date DateTime?
+
+//   is_trailer  Boolean? @default(false)
+//   trailer_url String? // public URL to trailer video
+
+//   // Self-relation for series
+//   parent_series Content?  @relation("SeriesEpisodes", fields: [series_id], references: [id])
+//   episodes      Content[] @relation("SeriesEpisodes")
+
+//   Rating      Rating[]
+//   Favourite   Favourite[]
+//   ContentView ContentView[]
+//   Cast        Cast[]
+// }
+
 model Content {
-  id          String    @id @default(cuid())
-  created_at  DateTime? @default(now())
-  updated_at  DateTime? @updatedAt
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  deleted_at DateTime?
+
+  title       String?
   description String?
 
-  title          String?
-  genre          Genra?
-  category_id    String?
-  category       Category?      @relation(fields: [category_id], references: [id])
-  content_type   String?
-  duration       String? // or Int
-  content_status Content_status @default(draft)
+  genre       Genra[]
+  category_id String?
+  category    Category? @relation(fields: [category_id], references: [id])
 
-  storage_provider String? // "local" | "s3"
+  content_type ContentType @default(movie) // movie | series | episode
+  mime_type    String? // "video/mp4", "video/webm", "video/quicktime"
+
+  duration_seconds Int?
+
+  content_status Content_status
+  // status         statusType?
+
+  storage_provider String?
   s3_bucket        String?
   s3_key           String?
   s3_thumb_key     String?
@@ -357,19 +430,42 @@ model Content {
   file_size_bytes  BigInt?
   etag             String?
   checksum_sha256  String?
-  status           statusType? @default(published)
-  type             String?     @default("4k")
-  view_count       Int?        @default(0)
 
-  thumbnail  String? // optional public URL
-  video      String? // optional public URL
-  is_premium Boolean? @default(false) // if true, only premium users can access this content
+  quality    String?
+  view_count Int     @default(0)
 
-  Rating Rating[]
+  thumbnail String?
+  video     String?
 
-  Favourite Favourite[]
+  is_premium Boolean @default(false)
 
+  series_id      String?
+  season_number  Int?
+  episode_number Int?
+
+  release_date DateTime?
+
+  // Trailer relationship - if content_type is 'trailer', this points to what content this trailer is for
+  trailer_for_id String?
+  trailer_for    Content?  @relation("TrailerOf", fields: [trailer_for_id], references: [id])
+  trailers       Content[] @relation("TrailerOf")
+
+  parent_series Content?  @relation("SeriesEpisodes", fields: [series_id], references: [id])
+  episodes      Content[] @relation("SeriesEpisodes")
+
+  Rating      Rating[]
+  Favourite   Favourite[]
   ContentView ContentView[]
+  Cast        Cast[]
+
+  @@index([category_id])
+  @@index([is_premium])
+  // @@index([status])
+  @@index([release_date])
+  @@index([series_id])
+  @@index([view_count])
+  @@index([deleted_at])
+  @@unique([series_id, season_number, episode_number])
 }
 
 model ContentView {
@@ -380,10 +476,31 @@ model ContentView {
   content_id String
 
   user    User?   @relation(fields: [user_id], references: [id])
-  content Content @relation(fields: [content_id], references: [id])
+  content Content @relation(fields: [content_id], references: [id], onDelete: Cascade)
 
   @@index([user_id, content_id, viewed_at])
+  @@index([content_id, viewed_at])
+  @@index([user_id])
   @@map("content_views")
+}
+
+model Cast {
+  id         String    @id @default(cuid())
+  created_at DateTime? @default(now())
+  updated_at DateTime? @default(now())
+  deleted_at DateTime?
+  status     Int?      @default(1) @db.SmallInt
+
+  name       String?
+  role       String? // e.g., Actor, Director, Producer
+  bio        String?   @db.Text
+  birth_date DateTime? @db.Date
+  photo      String? // public URL to photo image
+
+  content   Content? @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  contentId String?
+
+  @@map("casts")
 }
 
 model Rating {
@@ -396,11 +513,12 @@ model Rating {
   user    User?   @relation(fields: [user_id], references: [id])
 
   content_id String?
-  content    Content? @relation(fields: [content_id], references: [id])
+  content    Content? @relation(fields: [content_id], references: [id], onDelete: Cascade)
 
   rating  Int?    @default(0)
   comment String?
 
+  @@unique([user_id, content_id])
   @@map("ratings")
 }
 

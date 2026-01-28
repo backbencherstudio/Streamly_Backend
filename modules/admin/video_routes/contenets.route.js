@@ -1,12 +1,13 @@
 import express from "express";
 import { PrismaClient } from "@prisma/client";
-import { verifyUser } from "../../../middlewares/verifyUsers.js"; // Assuming you are using it elsewhere
+import { verifyUser } from "../../../middlewares/verifyUsers.js";
+
 const prisma = new PrismaClient();
 const r = express.Router();
 
 const serialize = (data) =>
   JSON.parse(
-    JSON.stringify(data, (_, v) => (typeof v === "bigint" ? v.toString() : v))
+    JSON.stringify(data, (_, v) => (typeof v === "bigint" ? v.toString() : v)),
   );
 
 // Helper function to build the S3 URL
@@ -18,20 +19,24 @@ const buildS3Url = (bucket, key) => {
   const region = process.env.AWS_REGION || "us-east-1";
   return `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
 };
+
 // Helper function to build local file URL
 const buildLocalUrl = (file) => {
-  const PUBLIC_BASE_URL =
-    process.env.APP_URL || "http://localhost:4005";
+  const PUBLIC_BASE_URL = process.env.APP_URL || "http://localhost:4005";
   return file ? `${PUBLIC_BASE_URL}/uploads/${file}` : null;
 };
-// Route to get all contents
+// Route to get all contents (excluding soft-deleted)
 r.get("/allContents", verifyUser("admin"), async (req, res) => {
   try {
     const rows = await prisma.content.findMany({
+      where: {
+        deleted_at: null,
+      },
       orderBy: { created_at: "desc" },
       select: {
         id: true,
         title: true,
+        description: true,
         genre: true,
         category: {
           select: {
@@ -39,32 +44,43 @@ r.get("/allContents", verifyUser("admin"), async (req, res) => {
             name: true,
           },
         },
-        type: true,
-        file_size_bytes: true,
-        status: true,
-        category_id: true,
+        content_type: true,
         content_status: true,
-        created_at: true,
+        quality: true,
+        is_premium: true,
+        file_size_bytes: true,
+        duration_seconds: true,
         view_count: true,
+        created_at: true,
         s3_bucket: true,
         s3_key: true,
         s3_thumb_key: true,
         video: true,
+        thumbnail: true,
+        series_id: true,
+        season_number: true,
+        episode_number: true,
+        parent_series: {
+          select: {
+            id: true,
+            title: true,
+          },
+        },
       },
     });
 
     const serializedRows = rows.map((row) => {
       const video =
         buildS3Url(row.s3_bucket, row.s3_key) || buildLocalUrl(row.video);
-      const thumbnailUrl =
+      const thumbnail =
         buildS3Url(row.s3_bucket, row.s3_thumb_key) ||
         buildLocalUrl(row.thumbnail);
-      const thumbnail = thumbnailUrl ? thumbnailUrl : null;
 
       delete row.s3_bucket;
       delete row.s3_key;
       delete row.s3_thumb_key;
       delete row.video;
+
       return {
         ...serialize(row),
         video,
@@ -79,17 +95,22 @@ r.get("/allContents", verifyUser("admin"), async (req, res) => {
   }
 });
 
-//--------------------latest contents-------------------
 r.get("/latestContents", async (req, res) => {
   try {
     const contents = await prisma.content.findMany({
+      where: {
+        deleted_at: null,
+        content_type: { in: ["movie", "series", "episode"] },
+        content_type: { in: ["movie", "series", "episode"] }, // Exclude trailers
+      },
       orderBy: {
         created_at: "desc",
       },
-      take: 4, 
+      take: 6,
       include: {
         category: {
           select: {
+            id: true,
             name: true,
           },
         },
@@ -107,13 +128,14 @@ r.get("/latestContents", async (req, res) => {
       return {
         id: content.id,
         title: content.title,
+        description: content.description,
         genre: content.genre,
-        category: {
-          name: content.category.name,
-        },
-        type: content.type,
-        file_size_bytes: content.file_size_bytes,
-        status: content.status,
+        category: content.category,
+        content_type: content.content_type,
+        quality: content.quality,
+        is_premium: content.is_premium,
+        file_size_bytes: serialize(content.file_size_bytes),
+        duration_seconds: content.duration_seconds,
         content_status: content.content_status,
         created_at: content.created_at,
         view_count: content.view_count,
@@ -129,49 +151,93 @@ r.get("/latestContents", async (req, res) => {
   }
 });
 
+// Get content by ID
 r.get("/:id", verifyUser("admin"), async (req, res) => {
   const { id } = req.params;
   try {
     const row = await prisma.content.findUnique({
-      where: { id: id },
-      select: {
-        id: true,
-        title: true,
-        genre: true,
-        category_id: true,
-        type: true,
-        file_size_bytes: true,
-        status: true,
-        content_status: true,
-        created_at: true,
-        view_count: true,
-        s3_bucket: true,
-        s3_key: true,
-        s3_thumb_key: true,
-        video: true,
+      where: { id },
+      include: {
+        category: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+          },
+        },
+        parent_series: {
+          select: {
+            id: true,
+            title: true,
+          },
+        },
+        episodes: {
+          where: { deleted_at: null },
+          select: {
+            id: true,
+            title: true,
+            season_number: true,
+            episode_number: true,
+            view_count: true,
+            content_status: true,
+            thumbnail: true,
+            s3_bucket: true,
+            s3_thumb_key: true,
+          },
+        },
+        trailers: {
+          where: { deleted_at: null },
+          select: {
+            id: true,
+            title: true,
+            content_status: true,
+          },
+        },
+        Cast: {
+          select: {
+            id: true,
+            name: true,
+            role: true,
+            photo: true,
+          },
+        },
       },
     });
 
-    if (!row) {
-      return res
-        .status(404)
-        .json({ error: "Content not exist or maybe deleted" });
+    if (!row || row.deleted_at) {
+      return res.status(404).json({ error: "Content not found or deleted" });
     }
 
     const video =
       buildS3Url(row.s3_bucket, row.s3_key) || buildLocalUrl(row.video);
-    const thumbnailUrl =
+    const thumbnail =
       buildS3Url(row.s3_bucket, row.s3_thumb_key) ||
       buildLocalUrl(row.thumbnail);
-    const thumbnail = thumbnailUrl ? thumbnailUrl : null;
+
+    const episodes = (row.episodes || []).map((episode) => {
+      const episodeThumb =
+        buildS3Url(episode.s3_bucket, episode.s3_thumb_key) ||
+        buildLocalUrl(episode.thumbnail);
+      return {
+        id: episode.id,
+        title: episode.title,
+        season_number: episode.season_number,
+        episode_number: episode.episode_number,
+        view_count: episode.view_count,
+        content_status: episode.content_status,
+        thumbnail: episodeThumb,
+      };
+    });
 
     delete row.s3_bucket;
     delete row.s3_key;
     delete row.s3_thumb_key;
     delete row.video;
+    delete row.thumbnail;
+    delete row.episodes;
 
     res.json({
-      ...serialize(row),
+      ...serialize({ ...row, episodes }),
       video,
       thumbnail,
     });
@@ -181,16 +247,74 @@ r.get("/:id", verifyUser("admin"), async (req, res) => {
   }
 });
 
+// Updated content
+r.patch("/:id/update", async (req, res) => {
+  const { id } = req.params;
+  const {
+    title,
+    description,
+    genre,
+    category_id,
+    content_type,
+    content_status,
+    quality,
+    is_premium,
+    duration_seconds,
+    series_id,
+    season_number,
+    episode_number,
+    trailer_for_id,
+    release_date,
+  } = req.body;
+
+  try {
+    const existingContent = await prisma.content.findUnique({
+      where: { id },
+    });
+    if (!existingContent) {
+      return res.status(404).json({ error: "Content not found" });
+    }
+
+    const updatedContent = await prisma.content.update({
+      where: { id },
+      data: {
+        title: title ?? existingContent.title,
+        description: description ?? existingContent.description,
+        genre: genre ?? existingContent.genre,
+        category_id: category_id ?? existingContent.category_id,
+        content_type: content_type ?? existingContent.content_type,
+        content_status: content_status ?? existingContent.content_status,
+        quality: quality ?? existingContent.quality,
+        is_premium: is_premium ?? existingContent.is_premium,
+        duration_seconds: duration_seconds ?? existingContent.duration_seconds,
+        series_id: series_id ?? existingContent.series_id,
+        season_number: season_number ?? existingContent.season_number,
+        episode_number: episode_number ?? existingContent.episode_number,
+        trailer_for_id: trailer_for_id ?? existingContent.trailer_for_id,
+        release_date: release_date ?? existingContent.release_date,
+      },
+    });
+
+    return res.json({
+      message: "Content updated successfully",
+      updatedContent,
+    });
+  } catch (error) {
+    console.log("Error updating content:", error);
+    res.status(500).json({ error: "Failed to update content" });
+  }
+});
+
+// Get content by category
 r.get("/getoneWithcat/:category", async (req, res) => {
   const { category } = req.params;
 
   try {
-    // Find category by slug or name (case-insensitive)
     const categoryData = await prisma.category.findFirst({
       where: {
         OR: [
           { slug: { equals: category.toLowerCase() } },
-          { name: { equals: category, mode: 'insensitive' } },
+          { name: { equals: category, mode: "insensitive" } },
         ],
       },
     });
@@ -204,6 +328,8 @@ r.get("/getoneWithcat/:category", async (req, res) => {
     const contents = await prisma.content.findMany({
       where: {
         category_id: categoryData.id,
+        deleted_at: null,
+        content_type: { in: ["movie", "series", "episode"] },
       },
     });
 
@@ -221,20 +347,22 @@ r.get("/getoneWithcat/:category", async (req, res) => {
         buildS3Url(content.s3_bucket, content.s3_thumb_key) ||
         buildLocalUrl(content.thumbnail);
 
-      delete content.s3_bucket;
-      delete content.s3_key;
-      delete content.s3_thumb_key;
-      delete content.video;
-      delete content.duration;
-      delete content.storage_provider;
-      delete content.original_name;
-      delete content.checksum_sha256;
-      delete content.content_type;
-
       return {
-        ...serialize(content),
+        id: content.id,
+        title: content.title,
+        description: content.description,
+        genre: content.genre,
+        category_id: content.category_id,
+        content_type: content.content_type,
+        quality: content.quality,
+        is_premium: content.is_premium,
+        file_size_bytes: serialize(content.file_size_bytes),
+        duration_seconds: content.duration_seconds,
+        content_status: content.content_status,
+        view_count: content.view_count,
+        created_at: content.created_at,
         video: videoUrl,
-        thumbnail: thumbnailUrl ? thumbnailUrl : null,
+        thumbnail: thumbnailUrl,
       };
     });
 
@@ -245,18 +373,16 @@ r.get("/getoneWithcat/:category", async (req, res) => {
   }
 });
 
-
-//--------------------getting popular contents by category-------------------
+// Get popular contents by category
 r.get("/getPopularContents/:category", async (req, res) => {
   const { category } = req.params;
 
   try {
-    // Find category by slug or name (case-insensitive)
     const categoryData = await prisma.category.findFirst({
       where: {
         OR: [
           { slug: { equals: category.toLowerCase() } },
-          { name: { equals: category, mode: 'insensitive' } },
+          { name: { equals: category, mode: "insensitive" } },
         ],
       },
     });
@@ -271,6 +397,8 @@ r.get("/getPopularContents/:category", async (req, res) => {
       where: {
         content: {
           category_id: categoryData.id,
+          deleted_at: null,
+          content_type: { in: ["movie", "series", "episode"] },
         },
       },
       select: {
@@ -292,14 +420,15 @@ r.get("/getPopularContents/:category", async (req, res) => {
 
     const contents = await prisma.content.findMany({
       where: {
-        id: { in: contentIds }, 
+        id: { in: contentIds },
+        deleted_at: null,
       },
     });
 
     const formattedContents = contents.map((content) => {
-      const rating = ratings.find(
-        (rating) => rating.content_id === content.id
-      ).rating; 
+      const contentRating = ratings.find(
+        (rating) => rating.content_id === content.id,
+      ).rating;
 
       const videoUrl =
         buildS3Url(content.s3_bucket, content.s3_key) ||
@@ -308,26 +437,28 @@ r.get("/getPopularContents/:category", async (req, res) => {
         buildS3Url(content.s3_bucket, content.s3_thumb_key) ||
         buildLocalUrl(content.thumbnail);
 
-      delete content.s3_bucket;
-      delete content.s3_key;
-      delete content.s3_thumb_key;
-      delete content.video;
-      delete content.duration;
-      delete content.storage_provider;
-      delete content.original_name;
-      delete content.checksum_sha256;
-      delete content.content_type;
-
       return {
-        ...serialize(content), 
+        id: content.id,
+        title: content.title,
+        description: content.description,
+        genre: content.genre,
+        category_id: content.category_id,
+        content_type: content.content_type,
+        quality: content.quality,
+        is_premium: content.is_premium,
+        file_size_bytes: serialize(content.file_size_bytes),
+        duration_seconds: content.duration_seconds,
+        content_status: content.content_status,
+        view_count: content.view_count,
+        created_at: content.created_at,
+        rating: contentRating,
         video: videoUrl,
-        thumbnail: thumbnailUrl || null,
-        rating, 
+        thumbnail: thumbnailUrl,
       };
     });
 
     const sortedContents = formattedContents.sort(
-      (a, b) => b.rating - a.rating
+      (a, b) => b.rating - a.rating,
     );
 
     res.json({ contents: sortedContents });
@@ -339,22 +470,24 @@ r.get("/getPopularContents/:category", async (req, res) => {
   }
 });
 
-
+// Delete content (soft delete)
 r.delete("/:id", verifyUser("admin"), async (req, res) => {
   const { id } = req.params;
   try {
     const content = await prisma.content.findUnique({
-      where: { id: id },
+      where: { id },
     });
 
     if (!content) {
       return res
         .status(404)
-        .json({ error: "Content not exist or maybe deleted" });
+        .json({ error: "Content not found or already deleted" });
     }
 
-    await prisma.content.delete({
-      where: { id: id },
+    // Soft delete: update deleted_at timestamp
+    await prisma.content.update({
+      where: { id },
+      data: { deleted_at: new Date() },
     });
 
     res.json({ message: "Content deleted successfully" });
@@ -363,7 +496,5 @@ r.delete("/:id", verifyUser("admin"), async (req, res) => {
     res.status(500).json({ error: "Failed to delete content" });
   }
 });
-
-
 
 export default r;

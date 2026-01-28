@@ -33,23 +33,24 @@ const toListCard = (content) => {
   const base = {
     id: content.id,
     title: content.title,
+    description: content.description,
     genre: content.genre,
-    type: content.type,
+    content_type: content.content_type,
+    quality: content.quality,
+    is_premium: content.is_premium,
     view_count: content.view_count,
+    duration_seconds: content.duration_seconds,
     created_at: content.created_at,
-    status: content.status,
     content_status: content.content_status,
-    category: content.category ? { id: content.category.id, name: content.category.name } : null,
+    category: content.category ? { id: content.category.id, name: content.category.name, slug: content.category.slug } : null,
   };
   return {
     ...serialize(base),
-    // keep thumbnail URL for UI convenience
     thumbnail: buildS3Url(content.s3_bucket, content.s3_thumb_key) || buildLocalUrl(content.thumbnail),
-    // expose raw storage fields so frontend can build video URL client-side
     s3_bucket: content.s3_bucket,
     s3_key: content.s3_key,
     s3_thumb_key: content.s3_thumb_key,
-    video: content.video, // local filename/path if stored locally
+    video: content.video,
   };
 };
 
@@ -61,23 +62,78 @@ const toWatchCard = (content) => {
   };
 };
 
+// Helpers to fetch related content
+const fetchRelatedByCategory = async (categoryId, excludeId, take = 12) => {
+  const rows = await prisma.content.findMany({
+    where: { 
+      category_id: categoryId, 
+      content_status: "published", 
+      deleted_at: null,
+      id: { not: excludeId },
+      content_type: { in: ["movie", "series", "episode"] },
+    },
+    orderBy: { view_count: "desc" },
+    take,
+    include: { category: true },
+  });
+  return rows.map(toListCard);
+};
+
+const fetchRelatedByGenre = async (genres, excludeId, take = 12) => {
+  const rows = await prisma.content.findMany({
+    where: { 
+      content_status: "published", 
+      deleted_at: null,
+      id: { not: excludeId },
+      content_type: { in: ["movie", "series", "episode"] },
+      genre: {
+        hasSome: Array.isArray(genres) ? genres : [genres],
+      },
+    },
+    orderBy: { view_count: "desc" },
+    take,
+    include: { category: true },
+  });
+  return rows.map(toListCard);
+};
+
+const fetchTrailersInCategory = async (categoryId, take = 6) => {
+  const rows = await prisma.content.findMany({
+    where: {
+      category_id: categoryId,
+      content_status: "published",
+      deleted_at: null,
+      content_type: "trailer",
+    },
+    orderBy: { created_at: "desc" },
+    take,
+    include: { category: true },
+  });
+  return rows.map(toListCard);
+};
+
 // GET /api/contents/user/home
-// Dynamically fetch popular content from top categories (by content count)
+// Dynamically fetch popular content from top categories (by content count) with pagination
 export const getHomeSections = async (req, res) => {
   try {
     const take = Number(req.query.take ?? 8);
+    const page = Number(req.query.page ?? 1);
     const limit = 5; // number of categories to show as sections
     
     if (Number.isNaN(take) || take < 1 || take > 50) {
       return res.status(400).json({ message: "take must be 1-50" });
     }
+    if (Number.isNaN(page) || page < 1) {
+      return res.status(400).json({ message: "page must be >= 1" });
+    }
 
-    // Get top categories by content count (with published status)
+    // Get top categories by content count (with published status and not deleted)
     const topCategories = await prisma.category.findMany({
       where: {
         contents: {
           some: {
-            status: "published"
+            content_status: "published",
+            deleted_at: null,
           }
         }
       },
@@ -95,30 +151,43 @@ export const getHomeSections = async (req, res) => {
     });
 
     if (topCategories.length === 0) {
-      return res.json({ sections: {} });
+      return res.json({ sections: {}, page, take, total: 0 });
     }
 
     const sections = {};
 
-    // For each category, fetch popular content (sorted by highest rating)
+    // For each category, fetch popular content with pagination
     for (const category of topCategories) {
       try {
-        const ratings = await prisma.rating.findMany({
-          where: {
-            content: {
-              category_id: category.id,
-              status: "published"
+        const [ratings, totalCount] = await Promise.all([
+          prisma.rating.findMany({
+            where: {
+              content: {
+                category_id: category.id,
+                content_status: "published",
+                deleted_at: null,
+              }
+            },
+            select: {
+              content_id: true,
+              rating: true
+            },
+            orderBy: {
+              rating: "desc"
+            },
+            skip: (page - 1) * take,
+            take
+          }),
+          prisma.rating.count({
+            where: {
+              content: {
+                category_id: category.id,
+                content_status: "published",
+                deleted_at: null,
+              }
             }
-          },
-          select: {
-            content_id: true,
-            rating: true
-          },
-          orderBy: {
-            rating: "desc"
-          },
-          take: take
-        });
+          })
+        ]);
 
         if (ratings.length === 0) continue;
 
@@ -126,20 +195,27 @@ export const getHomeSections = async (req, res) => {
         const contents = await prisma.content.findMany({
           where: {
             id: { in: contentIds },
-            status: "published"
+            content_status: "published",
+            deleted_at: null,
           },
           include: { category: true }
         });
 
         const sectionKey = category.slug || category.name || `category-${category.id}`;
-        sections[sectionKey] = contents.map(toListCard);
+        sections[sectionKey] = {
+          items: contents.map(toListCard),
+          page,
+          take,
+          total: totalCount,
+          totalPages: Math.ceil(totalCount / take)
+        };
       } catch (categoryError) {
         console.error(`Error fetching popular content for category ${category.id}:`, categoryError);
         // Skip this category on error, continue with next
       }
     }
 
-    return res.json({ sections });
+    return res.json({ sections, page, take });
   } catch (e) {
     console.error("getHomeSections error", e);
     return res.status(500).json({ message: "Internal Server Error" });
@@ -152,6 +228,15 @@ export const getRecommendedForUser = async (req, res) => {
     const userId = req.user?.userId;
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
+    const take = Number(req.query.take ?? 20);
+    const page = Number(req.query.page ?? 1);
+    if (Number.isNaN(take) || take < 1 || take > 50) {
+      return res.status(400).json({ message: "take must be 1-50" });
+    }
+    if (Number.isNaN(page) || page < 1) {
+      return res.status(400).json({ message: "page must be >= 1" });
+    }
+
     // Derive top genres from user's favourites and ratings
     const [favs, ratings] = await Promise.all([
       prisma.favourite.findMany({ where: { user_id: userId }, include: { content: true } }),
@@ -160,30 +245,68 @@ export const getRecommendedForUser = async (req, res) => {
 
     const genreCount = new Map();
     for (const f of favs) {
-      const g = f.content?.genre;
-      if (g) genreCount.set(g, (genreCount.get(g) || 0) + 2); // weight favourites
+      const genres = f.content?.genre || [];
+      for (const g of genres) {
+        genreCount.set(g, (genreCount.get(g) || 0) + 2); // weight favourites
+      }
     }
     for (const r of ratings) {
-      const g = r.content?.genre;
-      if (g) genreCount.set(g, (genreCount.get(g) || 0) + (r.rating || 0));
+      const genres = r.content?.genre || [];
+      for (const g of genres) {
+        genreCount.set(g, (genreCount.get(g) || 0) + (r.rating || 0));
+      }
     }
 
     const sorted = Array.from(genreCount.entries()).sort((a, b) => b[1] - a[1]);
     const topGenres = sorted.slice(0, 3).map(([g]) => g);
 
-    let contents = [];
-    if (topGenres.length) {
-      contents = await prisma.content.findMany({
-        where: { genre: { in: topGenres } },
-        orderBy: { created_at: "desc" },
-        take: 24,
-        include: { category: true },
-      });
-    } else {
-      contents = await prisma.content.findMany({ orderBy: { created_at: "desc" }, take: 24, include: { category: true } });
-    }
+    const [contents, total] = await Promise.all([
+      topGenres.length
+        ? prisma.content.findMany({
+            where: { 
+              genre: { hasSome: topGenres },
+              content_status: "published",
+              deleted_at: null,
+            },
+            orderBy: { created_at: "desc" },
+            skip: (page - 1) * take,
+            take,
+            include: { category: true },
+          })
+        : prisma.content.findMany({ 
+            where: { 
+              content_status: "published",
+              deleted_at: null,
+            },
+            orderBy: { created_at: "desc" }, 
+            skip: (page - 1) * take,
+            take,
+            include: { category: true } 
+          }),
+      topGenres.length
+        ? prisma.content.count({
+            where: { 
+              genre: { hasSome: topGenres },
+              content_status: "published",
+              deleted_at: null,
+            }
+          })
+        : prisma.content.count({
+            where: { 
+              content_status: "published",
+              deleted_at: null,
+            }
+          })
+    ]);
 
-    return res.json({ recommended: contents.map(toListCard), basis: topGenres });
+    return res.json({ 
+      recommended: contents.map(toListCard), 
+      basis: topGenres,
+      page,
+      take,
+      total,
+      totalPages: Math.ceil(total / take)
+    });
   } catch (e) {
     console.error("getRecommendedForUser error", e);
     return res.status(500).json({ message: "Internal Server Error" });
@@ -191,7 +314,7 @@ export const getRecommendedForUser = async (req, res) => {
 };
 
 // GET /api/contents/user/genre/:genre
-// NOTE: Reuses /api/admin/categories/getContentsByGenre/:genre logic with pagination
+// Fetch content by genre with pagination
 export const getByGenre = async (req, res) => {
   try {
     const { genre } = req.params;
@@ -208,13 +331,23 @@ export const getByGenre = async (req, res) => {
 
     const [contents, total] = await Promise.all([
       prisma.content.findMany({
-        where: { genre, status: "published" },
+        where: { 
+          genre: { has: genre.toLowerCase() },
+          content_status: "published",
+          deleted_at: null,
+        },
         orderBy: { created_at: "desc" },
         skip: (page - 1) * take,
         take,
         include: { category: true },
       }),
-      prisma.content.count({ where: { genre, status: "published" } }),
+      prisma.content.count({ 
+        where: { 
+          genre: { has: genre.toLowerCase() },
+          content_status: "published",
+          deleted_at: null,
+        } 
+      }),
     ]);
 
     return res.json({ 
@@ -245,7 +378,7 @@ export const getContentDetails = async (req, res) => {
       },
     });
 
-    if (!row || row.status !== "published") {
+    if (!row || row.content_status !== "published" || row.deleted_at) {
       return res.status(404).json({ message: "Content not found" });
     }
 
@@ -264,6 +397,12 @@ export const getContentDetails = async (req, res) => {
       ...rest
     } = row;
 
+    const [relatedByCategory, relatedByGenre, trailers] = await Promise.all([
+      fetchRelatedByCategory(rest.category?.id, id, 12),
+      rest.genre && rest.genre.length > 0 ? fetchRelatedByGenre(rest.genre, id, 12) : Promise.resolve([]),
+      rest.category?.id ? fetchTrailersInCategory(rest.category.id, 6) : Promise.resolve([]),
+    ]);
+
     return res.json({
       ...serialize(rest),
       rating: {
@@ -272,6 +411,12 @@ export const getContentDetails = async (req, res) => {
       },
       video: buildS3Url(s3_bucket, s3_key) || buildLocalUrl(video),
       thumbnail: buildS3Url(s3_bucket, s3_thumb_key) || buildLocalUrl(thumbnail),
+      related: {
+        byCategory: relatedByCategory,
+        byGenre: relatedByGenre,
+        trailers,
+      },
+      cast: [],
     });
   } catch (e) {
     console.error("getContentDetails error", e);
@@ -291,7 +436,10 @@ export const getContentToWatch = async (req, res) => {
       where: { id },
       include: { category: true },
     });
-    if (!row) return res.status(404).json({ message: "Content not found" });
+    
+    if (!row || row.content_status !== "published" || row.deleted_at) {
+      return res.status(404).json({ message: "Content not found" });
+    }
 
     // 24h unique view per user
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -310,7 +458,45 @@ export const getContentToWatch = async (req, res) => {
       ]);
     }
 
-    return res.json(toWatchCard(row));
+    // Build related for player UI:
+    // If multiple items exist in same category, treat as episodes; else show similar by genre/category
+    const [sameCategory] = await Promise.all([
+      prisma.content.findMany({
+        where: { 
+          category_id: row.category_id, 
+          content_status: "published",
+          deleted_at: null,
+        },
+        orderBy: { created_at: "asc" },
+        include: { category: true },
+      }),
+    ]);
+
+    const episodes = sameCategory
+      .filter(c => c.id !== id)
+      .map(toListCard);
+
+    let similar = [];
+    if (episodes.length === 0) {
+      // fall back to similar content by genre/category
+      const [byCat, byGenre] = await Promise.all([
+        fetchRelatedByCategory(row.category_id, id, 12),
+        row.genre && row.genre.length > 0 ? fetchRelatedByGenre(row.genre, id, 12) : Promise.resolve([]),
+      ]);
+      // merge unique items
+      const seen = new Set();
+      similar = [...byCat, ...byGenre].filter(card => {
+        if (seen.has(card.id)) return false;
+        seen.add(card.id);
+        return true;
+      });
+    }
+
+    return res.json({
+      ...toWatchCard(row),
+      episodes,
+      similar,
+    });
   } catch (e) {
     console.error("getContentToWatch error", e);
     return res.status(500).json({ message: "Internal Server Error" });
@@ -329,8 +515,22 @@ export const getDownloadLink = async (req, res) => {
       return res.status(403).json({ message: "Premium subscription required to download" });
     }
 
-    const row = await prisma.content.findUnique({ where: { id }, select: { s3_bucket: true, s3_key: true, video: true } });
+    const row = await prisma.content.findUnique({ 
+      where: { id }, 
+      select: { 
+        s3_bucket: true, 
+        s3_key: true, 
+        video: true,
+        is_premium: true,
+      } 
+    });
+    
     if (!row) return res.status(404).json({ message: "Content not found" });
+    
+    // Check if content requires premium
+    if (row.is_premium && role !== "premium") {
+      return res.status(403).json({ message: "This content requires premium subscription" });
+    }
 
     // Prefer S3 signed link; fallback to local static URL
     if (row.s3_bucket && row.s3_key && S3_BUCKET) {
@@ -351,6 +551,472 @@ export const getDownloadLink = async (req, res) => {
     return res.json({ url: localUrl, expiresIn: 0 });
   } catch (e) {
     console.error("getDownloadLink error", e);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+// GET /api/contents/user/popular-categories
+// Returns top categories with metrics (content count, avg rating, etc) with pagination
+export const getPopularCategories = async (req, res) => {
+  try {
+    const take = Number(req.query.take ?? 10);
+    const page = Number(req.query.page ?? 1);
+    if (Number.isNaN(take) || take < 1 || take > 50) {
+      return res.status(400).json({ message: "take must be 1-50" });
+    }
+    if (Number.isNaN(page) || page < 1) {
+      return res.status(400).json({ message: "page must be >= 1" });
+    }
+
+    const [categoriesWithMetrics, totalCount] = await Promise.all([
+      prisma.category.findMany({
+        where: {
+          contents: {
+            some: {
+              content_status: "published",
+              deleted_at: null,
+            },
+          },
+        },
+        include: {
+          _count: {
+            select: { contents: true },
+          },
+        },
+        orderBy: {
+          contents: {
+            _count: "desc",
+          },
+        },
+        skip: (page - 1) * take,
+        take,
+      }),
+      prisma.category.count({
+        where: {
+          contents: {
+            some: {
+              content_status: "published",
+              deleted_at: null,
+            },
+          },
+        },
+      })
+    ]);
+
+    const popularCategories = await Promise.all(
+      categoriesWithMetrics.map(async (category) => {
+        const contentInCategory = await prisma.content.findMany({
+          where: {
+            category_id: category.id,
+            content_status: "published",
+            deleted_at: null,
+          },
+          include: {
+            Rating: {
+              select: { rating: true },
+            },
+          },
+        });
+
+        const totalViews = contentInCategory.reduce(
+          (sum, c) => sum + (c.view_count || 0),
+          0
+        );
+
+        const avgRating =
+          contentInCategory.length > 0
+            ? contentInCategory.reduce((sum, c) => {
+                const contentRatings = c.Rating || [];
+                const contentAvgRating =
+                  contentRatings.length > 0
+                    ? contentRatings.reduce((rSum, r) => rSum + (r.rating || 0), 0) /
+                      contentRatings.length
+                    : 0;
+                return sum + contentAvgRating;
+              }, 0) / contentInCategory.length
+            : 0;
+
+        const totalContent = contentInCategory.length;
+        const recentContent = contentInCategory.filter(
+          (c) =>
+            new Date(c.created_at) >
+            new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+        ).length;
+
+        const popularityScore =
+          totalContent * 10 +
+          totalViews * 0.1 +
+          avgRating * 100 +
+          recentContent * 15;
+
+        return {
+          id: category.id,
+          name: category.name,
+          slug: category.slug,
+          status: category.status,
+          metrics: {
+            total_content: totalContent,
+            total_views: totalViews,
+            avg_rating: parseFloat(avgRating.toFixed(2)),
+            recent_content_30days: recentContent,
+            popularity_score: parseFloat(popularityScore.toFixed(2)),
+          },
+          created_at: category.created_at,
+          updated_at: category.updated_at,
+        };
+      })
+    );
+
+    popularCategories.sort(
+      (a, b) => b.metrics.popularity_score - a.metrics.popularity_score
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: popularCategories,
+      page,
+      take,
+      total: totalCount,
+      totalPages: Math.ceil(totalCount / take),
+      count: popularCategories.length,
+    });
+  } catch (error) {
+    console.error("Error fetching popular categories:", error);
+    return res
+      .status(500)
+      .json({ message: "Internal Server Error", error: error.message });
+  }
+};
+
+
+// GET /api/contents/user/new-and-popular
+// Returns newest content + most popular/highly-rated content with pagination
+export const getNewAndPopular = async (req, res) => {
+  try {
+    const take = Number(req.query.take ?? 12);
+    const page = Number(req.query.page ?? 1);
+    if (Number.isNaN(take) || take < 1 || take > 50) {
+      return res.status(400).json({ message: "take must be 1-50" });
+    }
+    if (Number.isNaN(page) || page < 1) {
+      return res.status(400).json({ message: "page must be >= 1" });
+    }
+
+    // Get newest content with pagination
+    const [newest, newestTotal] = await Promise.all([
+      prisma.content.findMany({
+        where: {
+          content_status: "published",
+          deleted_at: null,
+          content_type: { in: ["movie", "series", "episode"] },
+        },
+        orderBy: { created_at: "desc" },
+        skip: (page - 1) * take,
+        take,
+        include: { category: true },
+      }),
+      prisma.content.count({
+        where: {
+          content_status: "published",
+          deleted_at: null,
+          content_type: { in: ["movie", "series", "episode"] },
+        }
+      })
+    ]);
+
+    // Get most popular by rating with pagination
+    const [ratings, ratingsTotal] = await Promise.all([
+      prisma.rating.findMany({
+        where: {
+          content: {
+            content_status: "published",
+            deleted_at: null,
+          },
+        },
+        select: {
+          content_id: true,
+          rating: true,
+        },
+        orderBy: { rating: "desc" },
+        skip: (page - 1) * take,
+        take,
+      }),
+      prisma.rating.groupBy({
+        by: ["content_id"],
+        where: {
+          content: {
+            content_status: "published",
+            deleted_at: null,
+          },
+        },
+      })
+    ]);
+
+    const popularIds = ratings.map((r) => r.content_id);
+    const popular = await prisma.content.findMany({
+      where: {
+        id: { in: popularIds },
+        content_status: "published",
+        deleted_at: null,
+      },
+      include: { category: true },
+    });
+
+    return res.json({
+      newest: {
+        items: newest.map(toListCard),
+        page,
+        take,
+        total: newestTotal,
+        totalPages: Math.ceil(newestTotal / take)
+      },
+      popular: {
+        items: popular.map(toListCard),
+        page,
+        take,
+        total: ratingsTotal.length,
+        totalPages: Math.ceil(ratingsTotal.length / take)
+      }
+    });
+  } catch (e) {
+    console.error("getNewAndPopular error", e);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+// GET /api/contents/user/upcoming/by-category
+// Returns upcoming content (movies, series, episodes, music_video) by category with pagination
+// Optional query params: content_type (movie|series|episode|music_video), take, page, limit
+export const getUpcomingByCategory = async (req, res) => {
+  try {
+    const take = Number(req.query.take ?? 12);
+    const page = Number(req.query.page ?? 1);
+    const limit = Number(req.query.limit ?? 5); // number of categories to show
+    const contentType = req.query.content_type; // optional filter: movie|series|episode|music_video
+
+    if (Number.isNaN(take) || take < 1 || take > 50) {
+      return res.status(400).json({ message: "take must be 1-50" });
+    }
+    if (Number.isNaN(page) || page < 1) {
+      return res.status(400).json({ message: "page must be >= 1" });
+    }
+
+    const now = new Date();
+    const validContentTypes = ["movie", "series", "episode", "music_video"]; // exclude trailer from upcoming
+
+    // Validate content_type filter if provided
+    if (contentType && !validContentTypes.includes(contentType)) {
+      return res.status(400).json({ 
+        message: `Invalid content_type. Valid options: ${validContentTypes.join(", ")}` 
+      });
+    }
+
+    // Build content type filter
+    const contentTypeFilter = contentType 
+      ? contentType 
+      : { in: validContentTypes };
+
+    // Get categories with upcoming content
+    const categoriesWithUpcoming = await prisma.category.findMany({
+      where: {
+        contents: {
+          some: {
+            content_status: "published",
+            deleted_at: null,
+            content_type: contentTypeFilter,
+            release_date: {
+              gte: now,
+            },
+          },
+        },
+      },
+      include: {
+        _count: {
+          select: { contents: true },
+        },
+      },
+      orderBy: {
+        contents: {
+          _count: "desc",
+        },
+      },
+      take: limit,
+    });
+
+    if (categoriesWithUpcoming.length === 0) {
+      return res.json({ 
+        upcoming: {}, 
+        page, 
+        take, 
+        message: "No upcoming content found",
+        filter: contentType || "all types (movie, series, episode, music_video)"
+      });
+    }
+
+    const upcoming = {};
+
+    // For each category, fetch upcoming content with pagination
+    for (const category of categoriesWithUpcoming) {
+      try {
+        const [upcomingInCategory, totalCount] = await Promise.all([
+          prisma.content.findMany({
+            where: {
+              category_id: category.id,
+              content_status: "published",
+              deleted_at: null,
+              content_type: contentTypeFilter,
+              release_date: {
+                gte: now,
+              },
+            },
+            orderBy: { release_date: "asc" },
+            skip: (page - 1) * take,
+            take,
+            include: { category: true },
+          }),
+          prisma.content.count({
+            where: {
+              category_id: category.id,
+              content_status: "published",
+              deleted_at: null,
+              content_type: contentTypeFilter,
+              release_date: {
+                gte: now,
+              },
+            }
+          })
+        ]);
+
+        if (upcomingInCategory.length > 0) {
+          const sectionKey = category.slug || category.name || `category-${category.id}`;
+          upcoming[sectionKey] = {
+            items: upcomingInCategory.map((content) => ({
+              ...toListCard(content),
+              release_date: content.release_date,
+              content_type: content.content_type,
+            })),
+            page,
+            take,
+            total: totalCount,
+            totalPages: Math.ceil(totalCount / take),
+            category_name: category.name,
+          };
+        }
+      } catch (categoryError) {
+        console.error(`Error fetching upcoming content for category ${category.id}:`, categoryError);
+        // Skip this category on error, continue with next
+      }
+    }
+
+    return res.json({ 
+      upcoming, 
+      page, 
+      take,
+      filter: contentType ? `Filtered by: ${contentType}` : "All types (movie, series, episode, music_video)"
+    });
+  } catch (e) {
+    console.error("getUpcomingByCategory error", e);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+// GET /api/contents/user/trending
+// Returns trending content (high views + recent + ratings in last 7 days) with pagination
+export const getTrendingContent = async (req, res) => {
+  try {
+    const take = Number(req.query.take ?? 20);
+    const page = Number(req.query.page ?? 1);
+    const limit = Number(req.query.limit ?? 5); // number of categories to show
+    if (Number.isNaN(take) || take < 1 || take > 50) {
+      return res.status(400).json({ message: "take must be 1-50" });
+    }
+    if (Number.isNaN(page) || page < 1) {
+      return res.status(400).json({ message: "page must be >= 1" });
+    }
+
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    // Get categories with recent content activity
+    const trendingCategories = await prisma.category.findMany({
+      where: {
+        contents: {
+          some: {
+            created_at: { gte: sevenDaysAgo },
+            content_status: "published",
+            deleted_at: null,
+          },
+        },
+      },
+      take: limit,
+    });
+
+    const trends = {};
+
+    for (const category of trendingCategories) {
+      try {
+        const [contentInCategory, totalCount] = await Promise.all([
+          prisma.content.findMany({
+            where: {
+              category_id: category.id,
+              content_status: "published",
+              deleted_at: null,
+            },
+            include: {
+              Rating: {
+                where: {
+                  created_at: { gte: sevenDaysAgo },
+                },
+                select: { rating: true },
+              },
+            },
+            orderBy: { view_count: "desc" },
+            skip: (page - 1) * take,
+            take,
+          }),
+          prisma.content.count({
+            where: {
+              category_id: category.id,
+              content_status: "published",
+              deleted_at: null,
+            }
+          })
+        ]);
+
+        const withTrendScore = contentInCategory.map((c) => {
+          const recentRatingAvg =
+            c.Rating.length > 0
+              ? c.Rating.reduce((sum, r) => sum + (r.rating || 0), 0) /
+                c.Rating.length
+              : 0;
+          const trendScore = c.view_count * 0.5 + recentRatingAvg * 100;
+          return {
+            ...c,
+            trend_score: parseFloat(trendScore.toFixed(2)),
+          };
+        });
+
+        const sectionKey = category.slug || category.name || `category-${category.id}`;
+        trends[sectionKey] = {
+          items: withTrendScore.map((c) => {
+            const { Rating, ...rest } = c;
+            return {
+              ...toListCard(rest),
+              trend_score: c.trend_score,
+            };
+          }),
+          page,
+          take,
+          total: totalCount,
+          totalPages: Math.ceil(totalCount / take)
+        };
+      } catch (err) {
+        console.error(`Error fetching trending for category ${category.id}:`, err);
+      }
+    }
+
+    return res.json({ trending: trends, page, take });
+  } catch (e) {
+    console.error("getTrendingContent error", e);
     return res.status(500).json({ message: "Internal Server Error" });
   }
 };

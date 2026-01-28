@@ -1,7 +1,11 @@
 import express from "express";
 import { PrismaClient } from "@prisma/client";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 
 const prisma = new PrismaClient();
+const __filename = fileURLToPath(import.meta.url);
 const route = express.Router();
 const buildS3Url = (bucket, key) => {
   if (!bucket || !key) return null;
@@ -139,34 +143,32 @@ export const deleteCategory = async (req, res) => {
   }
 };
 
-//----------------------get all genres----------------------
+//----------------------get all genres (dynamic from schema)----------------------
+const getGenresFromSchema = () => {
+  try {
+    const schemaPath = path.join(path.dirname(__filename), "../../../prisma/schema.prisma");
+    const schemaContent = fs.readFileSync(schemaPath, "utf-8");
+    const genraMatch = schemaContent.match(/enum Genra\s*\{([^}]+)\}/);
+    if (genraMatch) {
+      const genreValues = genraMatch[1]
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line && !line.startsWith("//"))
+        .map((line) => line.split("//")[0].trim())
+        .filter((line) => line);
+      return genreValues;
+    }
+    return [];
+  } catch (error) {
+    console.error("Error reading schema:", error);
+    return [];
+  }
+};
+
 export const getAllGenres = async (req, res) => {
   try {
-    const genres = [
-      "action",
-      "adventure",
-      "animation",
-      "biography",
-      "comedy",
-      "crime",
-      "documentary",
-      "drama",
-      "family",
-      "fantasy",
-      "history",
-      "horror",
-      "music",
-      "musical",
-      "mystery",
-      "romance",
-      "sci_fi",
-      "sport",
-      "thriller",
-      "war",
-      "western",
-    ];
-
-    res.json({ genres });
+    const genres = getGenresFromSchema();
+    res.json({ success: true, genres, count: genres.length });
   } catch (error) {
     console.error("Error fetching genres:", error);
     res.status(500).json({ error: "Failed to fetch genres" });
@@ -176,9 +178,20 @@ export const getContentsByGenre = async (req, res) => {
   const { genre } = req.params;
 
   try {
+    // Validate genre exists in schema
+    const availableGenres = getGenresFromSchema();
+    if (!availableGenres.includes(genre.toLowerCase())) {
+      return res.status(400).json({
+        error: `Invalid genre. Must be one of: ${availableGenres.join(", ")}`,
+      });
+    }
+
     const contents = await prisma.content.findMany({
       where: {
-        genre: genre,
+        deleted_at: null,
+        genre: {
+          has: genre.toLowerCase(),
+        },
       },
       orderBy: {
         created_at: "desc",
@@ -186,16 +199,18 @@ export const getContentsByGenre = async (req, res) => {
       include: {
         category: {
           select: {
+            id: true,
             name: true,
+            slug: true,
           },
         },
       },
     });
 
     if (contents.length === 0) {
-      return res
-        .status(404)
-        .json({ message: `No content found for genre ${genre}` });
+      return res.status(404).json({
+        message: `No content found for genre ${genre}`,
+      });
     }
 
     const formattedContents = contents.map((content) => {
@@ -209,22 +224,23 @@ export const getContentsByGenre = async (req, res) => {
       return {
         id: content.id,
         title: content.title,
+        description: content.description,
         genre: content.genre,
-        category: {
-          name: content.category.name,
-        },
-        type: content.type,
+        category: content.category,
+        content_type: content.content_type,
+        quality: content.quality,
+        is_premium: content.is_premium,
         file_size_bytes: content.file_size_bytes,
-        status: content.status,
+        duration_seconds: content.duration_seconds,
         content_status: content.content_status,
-        created_at: content.created_at,
         view_count: content.view_count,
+        created_at: content.created_at,
         video: videoUrl,
         thumbnail: thumbnailUrl,
       };
     });
 
-    res.json({ contents: formattedContents });
+    res.json({ success: true, contents: formattedContents, count: formattedContents.length });
   } catch (error) {
     console.error("Error fetching content by genre:", error);
     res.status(500).json({ error: "Failed to fetch content by genre" });

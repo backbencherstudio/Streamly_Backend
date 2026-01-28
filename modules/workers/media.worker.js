@@ -141,7 +141,7 @@ const worker = new Worker('media', async (job) => {
     await prisma.content.update({
       where: { id: contentId },
       data: {
-        duration: String(Math.round(durationSec || 0)),
+        duration_seconds: Math.round(durationSec || 0),
         content_status: 'published',
         file_size_bytes: BigInt(fileInfo.size),
       },
