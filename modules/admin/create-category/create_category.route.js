@@ -33,7 +33,7 @@ router.get("/popular", getPopularCategories);
 router.get("/trending", getTrendingCategories);
 
 // Existing service routes
-router.post("/create_service", createService);
+router.post("/create_service", verifyAdmin, createService);
 router.get("/services", getAllServices);
 
 router.get("/getAllGenres", getAllGenres);
