@@ -85,6 +85,8 @@ model User {
   Favourite             Favourite[]
   HelpSupport           HelpSupport[]
   contentViews          ContentView[]
+  downloads             Download[]
+  storageQuota          UserStorageQuota?
 
   @@map("users")
 }
@@ -217,7 +219,7 @@ enum Plan {
 
 enum Payment_method {
   No_pay
-  vredit_card
+  credit_card
   stripe
   paypal
 }
@@ -349,58 +351,6 @@ enum ContentType {
   music_video
 }
 
-// model Content {
-//   id          String    @id @default(cuid())
-//   created_at  DateTime? @default(now())
-//   updated_at  DateTime? @updatedAt
-//   description String?
-
-//   title          String?
-//   genre          Genra?
-//   category_id    String?
-//   category       Category?      @relation(fields: [category_id], references: [id])
-//   content_type   String?
-//   duration       String? // or Int
-//   content_status Content_status @default(draft)
-
-//   storage_provider String? // "local" | "s3"
-//   s3_bucket        String?
-//   s3_key           String?
-//   s3_thumb_key     String?
-//   original_name    String?
-//   file_size_bytes  BigInt?
-//   etag             String?
-//   checksum_sha256  String?
-//   status           statusType? @default(published)
-//   type             String?     @default("4k")
-//   view_count       Int?        @default(0)
-
-//   thumbnail  String? // optional public URL
-//   video      String? // optional public URL
-//   is_premium Boolean? @default(false) // if true, only premium users can access this content
-
-//   // for series and episodes
-//   series_id      String?
-//   series_title   String?
-//   episode_title  String?
-//   season_number  Int?
-//   episode_number Int?
-
-//   release_date DateTime?
-
-//   is_trailer  Boolean? @default(false)
-//   trailer_url String? // public URL to trailer video
-
-//   // Self-relation for series
-//   parent_series Content?  @relation("SeriesEpisodes", fields: [series_id], references: [id])
-//   episodes      Content[] @relation("SeriesEpisodes")
-
-//   Rating      Rating[]
-//   Favourite   Favourite[]
-//   ContentView ContentView[]
-//   Cast        Cast[]
-// }
-
 model Content {
   id         String   @id @default(cuid())
   created_at DateTime @default(now())
@@ -457,6 +407,7 @@ model Content {
   Favourite   Favourite[]
   ContentView ContentView[]
   Cast        Cast[]
+  downloads   Download[]  @relation("UserDownloads")
 
   @@index([category_id])
   @@index([is_premium])
@@ -661,4 +612,71 @@ model HelpSupport {
   status HelpSupportStatus @default(Open)
 
   @@map("help_and_support")
+}
+
+// Download storage for offline viewing
+enum DownloadStatus {
+  pending
+  downloading
+  completed
+  paused
+  failed
+  cancelled
+}
+
+enum StorageTier {
+  free      // 5 GB
+  premium   // 50 GB
+  family    // 100 GB
+}
+
+model Download {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  deleted_at DateTime?
+
+  user_id String
+  user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  content_id String
+  content    Content @relation("UserDownloads", fields: [content_id], references: [id], onDelete: Cascade)
+
+  status            DownloadStatus @default(pending)
+  quality           String? // "480p", "720p", "1080p", "4k"
+  progress          Int            @default(0) // 0-100 percentage
+  file_size_bytes   BigInt?
+  downloaded_bytes  BigInt         @default(0)
+  expires_at        DateTime? // When download will auto-delete (optional)
+  
+  // File storage paths
+  file_path         String? // Local: /downloads/users/{userId}/{contentId}.mp4
+  s3_key            String? // S3: users/{userId}/{contentId}.mp4 (for future migration)
+
+  // Error tracking
+  error_message String?
+  failed_count  Int     @default(0)
+
+  @@unique([user_id, content_id])
+  @@index([user_id, status])
+  @@index([expires_at])
+  @@map("downloads")
+}
+
+model UserStorageQuota {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+
+  user_id String    @unique
+  user    User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  tier                   StorageTier @default(premium) // premium|family (premium-only, no free tier)
+  total_storage_bytes    BigInt // Total allowed storage
+  used_storage_bytes     BigInt      @default(0) // Currently used storage
+  auto_delete_enabled    Boolean     @default(true) // Auto-delete old downloads
+  auto_delete_days       Int         @default(30) // Delete downloads older than X days
+  notification_threshold Int         @default(80) // Notify when % of storage used
+
+  @@map("user_storage_quotas")
 }

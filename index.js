@@ -8,7 +8,15 @@ import { spawn } from 'node:child_process';
 const PORT = process.env.PORT || 4005;
 
 const prisma = new PrismaClient();
-const worker = spawn(process.execPath, ['./modules/workers/media.worker.js'], {
+
+// Start media upload worker
+const mediaWorker = spawn(process.execPath, ['./modules/workers/media.worker.js'], {
+  stdio: 'inherit',
+  env: process.env,
+});
+
+// Start download worker
+const downloadWorker = spawn(process.execPath, ['./modules/workers/download.worker.js'], {
   stdio: 'inherit',
   env: process.env,
 });

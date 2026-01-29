@@ -1020,3 +1020,309 @@ export const getTrendingContent = async (req, res) => {
     return res.status(500).json({ message: "Internal Server Error" });
   }
 };
+
+// GET /api/contents/user/search
+// Full-text search with advanced filters (category, genres, year, keywords, top_rated)
+// Query params: q (search query), category, genres, year, top_rated, take, page
+export const searchContent = async (req, res) => {
+  try {
+    const q = req.query.q || ""; // search keywords
+    const category = req.query.category; // category slug or id
+    const genres = req.query.genres ? String(req.query.genres).split(",") : []; // comma-separated genres
+    const year = req.query.year ? Number(req.query.year) : null; // release year
+    const topRated = req.query.top_rated === "true"; // sort by rating
+    const take = Number(req.query.take ?? 20);
+    const page = Number(req.query.page ?? 1);
+
+    // Validation
+    if (Number.isNaN(take) || take < 1 || take > 100) {
+      return res.status(400).json({ message: "take must be 1-100" });
+    }
+    if (Number.isNaN(page) || page < 1) {
+      return res.status(400).json({ message: "page must be >= 1" });
+    }
+
+    // Build where clause
+    const where = {
+      content_status: "published",
+      deleted_at: null,
+      content_type: { in: ["movie", "series", "episode", "music_video"] }, // exclude trailers
+    };
+
+    // Search query (title or description)
+    if (q.trim()) {
+      where.OR = [
+        { title: { contains: q, mode: "insensitive" } },
+        { description: { contains: q, mode: "insensitive" } },
+      ];
+    }
+
+    // Category filter
+    if (category) {
+      const categoryRecord = await prisma.category.findFirst({
+        where: {
+          OR: [
+            { slug: { equals: category, mode: "insensitive" } },
+            { id: category },
+            { name: { equals: category, mode: "insensitive" } },
+          ],
+        },
+      });
+      if (categoryRecord) {
+        where.category_id = categoryRecord.id;
+      }
+    }
+
+    // Genre filter (intersection of all specified genres)
+    if (genres.length > 0) {
+      where.genre = {
+        hasSome: genres.map((g) => g.trim()),
+      };
+    }
+
+    // Year filter (based on release_date)
+    if (year) {
+      const startOfYear = new Date(year, 0, 1);
+      const endOfYear = new Date(year + 1, 0, 1);
+      where.release_date = {
+        gte: startOfYear,
+        lt: endOfYear,
+      };
+    }
+
+    // Fetch results with optional sorting
+    const orderBy = topRated 
+      ? { Rating: { _avg: "rating" } } 
+      : { created_at: "desc" };
+
+    const [results, total] = await Promise.all([
+      prisma.content.findMany({
+        where,
+        orderBy,
+        skip: (page - 1) * take,
+        take,
+        include: {
+          category: true,
+          Rating: topRated ? { select: { rating: true } } : false,
+        },
+      }),
+      prisma.content.count({ where }),
+    ]);
+
+    // Calculate average rating for each result if needed
+    const resultsWithRating = results.map((content) => {
+      const card = toListCard(content);
+      if (topRated && content.Rating && content.Rating.length > 0) {
+        const avgRating = 
+          content.Rating.reduce((sum, r) => sum + r.rating, 0) / content.Rating.length;
+        return { ...card, avg_rating: parseFloat(avgRating.toFixed(2)) };
+      }
+      return card;
+    });
+
+    return res.json({
+      results: resultsWithRating,
+      query: q,
+      filters: {
+        category: category || null,
+        genres: genres.length > 0 ? genres : null,
+        year: year || null,
+        top_rated: topRated,
+      },
+      page,
+      take,
+      total,
+      totalPages: Math.ceil(total / take),
+    });
+  } catch (e) {
+    console.error("searchContent error", e);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+// GET /api/contents/user/search/filters
+// Returns available filter options (categories, genres, years) for advanced search UI
+export const getSearchFilters = async (req, res) => {
+  try {
+    // Get all published categories with content count
+    const categories = await prisma.category.findMany({
+      where: {
+        contents: {
+          some: {
+            content_status: "published",
+            deleted_at: null,
+            content_type: { in: ["movie", "series", "episode", "music_video"] },
+          },
+        },
+      },
+      include: {
+        _count: {
+          select: { contents: true },
+        },
+      },
+      orderBy: { name: "asc" },
+    });
+
+    // Get all available genres from schema (dynamically)
+    const genrePattern = /enum Genra\s*\{([^}]+)\}/;
+    const fs = await import("fs");
+    const schemaPath = new URL("../../../prisma/schema.prisma", import.meta.url);
+    const schemaContent = fs.readFileSync(schemaPath, "utf-8");
+    const match = schemaContent.match(genrePattern);
+    const availableGenres = match
+      ? match[1]
+          .split("\n")
+          .map((line) => line.trim())
+          .filter((line) => line && !line.startsWith("//"))
+      : [];
+
+    // Get available years from content release_dates
+    const yearsResult = await prisma.content.findMany({
+      where: {
+        content_status: "published",
+        deleted_at: null,
+        release_date: { not: null },
+      },
+      select: { release_date: true },
+      distinct: ["release_date"],
+    });
+
+    const years = [...new Set(yearsResult.map((c) => c.release_date?.getFullYear()).filter(Boolean))]
+      .sort((a, b) => b - a);
+
+    return res.json({
+      categories: categories.map((cat) => ({
+        id: cat.id,
+        name: cat.name,
+        slug: cat.slug,
+        content_count: cat._count.contents,
+      })),
+      genres: availableGenres,
+      years,
+    });
+  } catch (e) {
+    console.error("getSearchFilters error", e);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+// GET /api/contents/user/browse/category/:slug
+// Browse all content in a specific category with sub-filtering
+export const browseCategory = async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const take = Number(req.query.take ?? 16);
+    const page = Number(req.query.page ?? 1);
+    const contentType = req.query.content_type; // optional: movie|series|episode|music_video
+
+    if (Number.isNaN(take) || take < 1 || take > 100) {
+      return res.status(400).json({ message: "take must be 1-100" });
+    }
+    if (Number.isNaN(page) || page < 1) {
+      return res.status(400).json({ message: "page must be >= 1" });
+    }
+
+    // Find category
+    const category = await prisma.category.findFirst({
+      where: { slug: { equals: slug, mode: "insensitive" } },
+    });
+
+    if (!category) {
+      return res.status(404).json({ message: "Category not found" });
+    }
+
+    // Build where clause
+    const where = {
+      category_id: category.id,
+      content_status: "published",
+      deleted_at: null,
+      content_type: contentType
+        ? contentType
+        : { in: ["movie", "series", "episode", "music_video"] },
+    };
+
+    const [contents, total] = await Promise.all([
+      prisma.content.findMany({
+        where,
+        orderBy: { created_at: "desc" },
+        skip: (page - 1) * take,
+        take,
+        include: { category: true },
+      }),
+      prisma.content.count({ where }),
+    ]);
+
+    // Group by content type for better organization
+    const grouped = {
+      movies: contents.filter((c) => c.content_type === "movie"),
+      series: contents.filter((c) => c.content_type === "series"),
+      episodes: contents.filter((c) => c.content_type === "episode"),
+      music_videos: contents.filter((c) => c.content_type === "music_video"),
+    };
+
+    return res.json({
+      category: {
+        id: category.id,
+        name: category.name,
+        slug: category.slug,
+      },
+      grouped: {
+        movies: grouped.movies.map(toListCard),
+        series: grouped.series.map(toListCard),
+        episodes: grouped.episodes.map(toListCard),
+        music_videos: grouped.music_videos.map(toListCard),
+      },
+      all_items: contents.map(toListCard),
+      page,
+      take,
+      total,
+      totalPages: Math.ceil(total / take),
+      content_type_filter: contentType || "all",
+    });
+  } catch (e) {
+    console.error("browseCategory error", e);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+// GET /api/contents/user/search/suggestions
+// Returns search suggestions based on partial query
+export const getSearchSuggestions = async (req, res) => {
+  try {
+    const q = req.query.q || "";
+
+    if (!q.trim() || q.length < 2) {
+      return res.json({ suggestions: [] });
+    }
+
+    const results = await prisma.content.findMany({
+      where: {
+        OR: [
+          { title: { contains: q, mode: "insensitive" } },
+          { description: { contains: q, mode: "insensitive" } },
+        ],
+        content_status: "published",
+        deleted_at: null,
+        content_type: { in: ["movie", "series", "episode", "music_video"] },
+      },
+      select: {
+        id: true,
+        title: true,
+        content_type: true,
+      },
+      take: 10,
+      orderBy: { view_count: "desc" },
+    });
+
+    return res.json({
+      suggestions: results.map((r) => ({
+        id: r.id,
+        title: r.title,
+        type: r.content_type,
+      })),
+    });
+  } catch (e) {
+    console.error("getSearchSuggestions error", e);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
