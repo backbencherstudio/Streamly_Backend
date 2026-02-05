@@ -68,6 +68,7 @@ const fetchRelatedByCategory = async (categoryId, excludeId, take = 12) => {
     where: { 
       category_id: categoryId, 
       content_status: "published", 
+      review_status: "approved",
       deleted_at: null,
       id: { not: excludeId },
       content_type: { in: ["movie", "series", "episode"] },
@@ -83,6 +84,7 @@ const fetchRelatedByGenre = async (genres, excludeId, take = 12) => {
   const rows = await prisma.content.findMany({
     where: { 
       content_status: "published", 
+      review_status: "approved",
       deleted_at: null,
       id: { not: excludeId },
       content_type: { in: ["movie", "series", "episode"] },
@@ -102,6 +104,7 @@ const fetchTrailersInCategory = async (categoryId, take = 6) => {
     where: {
       category_id: categoryId,
       content_status: "published",
+      review_status: "approved",
       deleted_at: null,
       content_type: "trailer",
     },
@@ -133,6 +136,7 @@ export const getHomeSections = async (req, res) => {
         contents: {
           some: {
             content_status: "published",
+            review_status: "approved",
             deleted_at: null,
           }
         }
@@ -165,6 +169,7 @@ export const getHomeSections = async (req, res) => {
               content: {
                 category_id: category.id,
                 content_status: "published",
+                review_status: "approved",
                 deleted_at: null,
               }
             },
@@ -183,6 +188,7 @@ export const getHomeSections = async (req, res) => {
               content: {
                 category_id: category.id,
                 content_status: "published",
+                review_status: "approved",
                 deleted_at: null,
               }
             }
@@ -196,6 +202,7 @@ export const getHomeSections = async (req, res) => {
           where: {
             id: { in: contentIds },
             content_status: "published",
+            review_status: "approved",
             deleted_at: null,
           },
           include: { category: true }
@@ -266,6 +273,7 @@ export const getRecommendedForUser = async (req, res) => {
             where: { 
               genre: { hasSome: topGenres },
               content_status: "published",
+              review_status: "approved",
               deleted_at: null,
             },
             orderBy: { created_at: "desc" },
@@ -276,6 +284,7 @@ export const getRecommendedForUser = async (req, res) => {
         : prisma.content.findMany({ 
             where: { 
               content_status: "published",
+              review_status: "approved",
               deleted_at: null,
             },
             orderBy: { created_at: "desc" }, 
@@ -288,12 +297,14 @@ export const getRecommendedForUser = async (req, res) => {
             where: { 
               genre: { hasSome: topGenres },
               content_status: "published",
+              review_status: "approved",
               deleted_at: null,
             }
           })
         : prisma.content.count({
             where: { 
               content_status: "published",
+              review_status: "approved",
               deleted_at: null,
             }
           })
@@ -334,6 +345,7 @@ export const getByGenre = async (req, res) => {
         where: { 
           genre: { has: genre.toLowerCase() },
           content_status: "published",
+          review_status: "approved",
           deleted_at: null,
         },
         orderBy: { created_at: "desc" },
@@ -345,6 +357,7 @@ export const getByGenre = async (req, res) => {
         where: { 
           genre: { has: genre.toLowerCase() },
           content_status: "published",
+          review_status: "approved",
           deleted_at: null,
         } 
       }),
@@ -379,6 +392,10 @@ export const getContentDetails = async (req, res) => {
     });
 
     if (!row || row.content_status !== "published" || row.deleted_at) {
+      return res.status(404).json({ message: "Content not found" });
+    }
+
+    if (row.review_status !== "approved") {
       return res.status(404).json({ message: "Content not found" });
     }
 
@@ -441,6 +458,10 @@ export const getContentToWatch = async (req, res) => {
       return res.status(404).json({ message: "Content not found" });
     }
 
+    if (row.review_status !== "approved") {
+      return res.status(404).json({ message: "Content not found" });
+    }
+
     // 24h unique view per user
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const recentView = await prisma.contentView.findFirst({
@@ -465,6 +486,7 @@ export const getContentToWatch = async (req, res) => {
         where: { 
           category_id: row.category_id, 
           content_status: "published",
+          review_status: "approved",
           deleted_at: null,
         },
         orderBy: { created_at: "asc" },
@@ -510,14 +532,16 @@ export const getDownloadLink = async (req, res) => {
     const { id } = req.params;
     if (!id) return res.status(400).json({ message: "id is required" });
 
-    const { role } = req.user || {};
-    if (role !== "premium") {
-      return res.status(403).json({ message: "Premium subscription required to download" });
+    if (!req.subscription) {
+      return res.status(403).json({ message: "Subscription required to download" });
     }
 
     const row = await prisma.content.findUnique({ 
       where: { id }, 
       select: { 
+        content_status: true,
+        review_status: true,
+        deleted_at: true,
         s3_bucket: true, 
         s3_key: true, 
         video: true,
@@ -527,9 +551,8 @@ export const getDownloadLink = async (req, res) => {
     
     if (!row) return res.status(404).json({ message: "Content not found" });
     
-    // Check if content requires premium
-    if (row.is_premium && role !== "premium") {
-      return res.status(403).json({ message: "This content requires premium subscription" });
+    if (row.deleted_at || row.content_status !== "published" || row.review_status !== "approved") {
+      return res.status(404).json({ message: "Content not found" });
     }
 
     // Prefer S3 signed link; fallback to local static URL
@@ -574,6 +597,7 @@ export const getPopularCategories = async (req, res) => {
           contents: {
             some: {
               content_status: "published",
+              review_status: "approved",
               deleted_at: null,
             },
           },
@@ -596,6 +620,7 @@ export const getPopularCategories = async (req, res) => {
           contents: {
             some: {
               content_status: "published",
+              review_status: "approved",
               deleted_at: null,
             },
           },
@@ -609,6 +634,7 @@ export const getPopularCategories = async (req, res) => {
           where: {
             category_id: category.id,
             content_status: "published",
+            review_status: "approved",
             deleted_at: null,
           },
           include: {
@@ -707,6 +733,7 @@ export const getNewAndPopular = async (req, res) => {
       prisma.content.findMany({
         where: {
           content_status: "published",
+          review_status: "approved",
           deleted_at: null,
           content_type: { in: ["movie", "series", "episode"] },
         },
@@ -718,6 +745,7 @@ export const getNewAndPopular = async (req, res) => {
       prisma.content.count({
         where: {
           content_status: "published",
+          review_status: "approved",
           deleted_at: null,
           content_type: { in: ["movie", "series", "episode"] },
         }
@@ -730,6 +758,7 @@ export const getNewAndPopular = async (req, res) => {
         where: {
           content: {
             content_status: "published",
+            review_status: "approved",
             deleted_at: null,
           },
         },
@@ -746,6 +775,7 @@ export const getNewAndPopular = async (req, res) => {
         where: {
           content: {
             content_status: "published",
+            review_status: "approved",
             deleted_at: null,
           },
         },
@@ -757,6 +787,7 @@ export const getNewAndPopular = async (req, res) => {
       where: {
         id: { in: popularIds },
         content_status: "published",
+        review_status: "approved",
         deleted_at: null,
       },
       include: { category: true },
@@ -822,6 +853,7 @@ export const getUpcomingByCategory = async (req, res) => {
         contents: {
           some: {
             content_status: "published",
+            review_status: "approved",
             deleted_at: null,
             content_type: contentTypeFilter,
             release_date: {
@@ -863,6 +895,7 @@ export const getUpcomingByCategory = async (req, res) => {
             where: {
               category_id: category.id,
               content_status: "published",
+              review_status: "approved",
               deleted_at: null,
               content_type: contentTypeFilter,
               release_date: {
@@ -878,6 +911,7 @@ export const getUpcomingByCategory = async (req, res) => {
             where: {
               category_id: category.id,
               content_status: "published",
+              review_status: "approved",
               deleted_at: null,
               content_type: contentTypeFilter,
               release_date: {
@@ -943,6 +977,7 @@ export const getTrendingContent = async (req, res) => {
           some: {
             created_at: { gte: sevenDaysAgo },
             content_status: "published",
+            review_status: "approved",
             deleted_at: null,
           },
         },
@@ -959,6 +994,7 @@ export const getTrendingContent = async (req, res) => {
             where: {
               category_id: category.id,
               content_status: "published",
+              review_status: "approved",
               deleted_at: null,
             },
             include: {
@@ -977,6 +1013,7 @@ export const getTrendingContent = async (req, res) => {
             where: {
               category_id: category.id,
               content_status: "published",
+              review_status: "approved",
               deleted_at: null,
             }
           })
@@ -1045,6 +1082,7 @@ export const searchContent = async (req, res) => {
     // Build where clause
     const where = {
       content_status: "published",
+      review_status: "approved",
       deleted_at: null,
       content_type: { in: ["movie", "series", "episode", "music_video"] }, // exclude trailers
     };
@@ -1150,6 +1188,7 @@ export const getSearchFilters = async (req, res) => {
         contents: {
           some: {
             content_status: "published",
+            review_status: "approved",
             deleted_at: null,
             content_type: { in: ["movie", "series", "episode", "music_video"] },
           },
@@ -1180,6 +1219,7 @@ export const getSearchFilters = async (req, res) => {
     const yearsResult = await prisma.content.findMany({
       where: {
         content_status: "published",
+        review_status: "approved",
         deleted_at: null,
         release_date: { not: null },
       },
@@ -1235,6 +1275,7 @@ export const browseCategory = async (req, res) => {
     const where = {
       category_id: category.id,
       content_status: "published",
+      review_status: "approved",
       deleted_at: null,
       content_type: contentType
         ? contentType
@@ -1302,6 +1343,7 @@ export const getSearchSuggestions = async (req, res) => {
           { description: { contains: q, mode: "insensitive" } },
         ],
         content_status: "published",
+        review_status: "approved",
         deleted_at: null,
         content_type: { in: ["movie", "series", "episode", "music_video"] },
       },

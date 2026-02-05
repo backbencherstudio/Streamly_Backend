@@ -19,28 +19,173 @@ const buildLocalUrl = (filePath) => {
   if (!filePath) return null;
   return `http://localhost:9000/${filePath}`;
 };
+
+function normalizeKind(value) {
+  if (!value) return "viewer";
+  const k = String(value).toLowerCase();
+  if (k === "viewer" || k === "creator") return k;
+  return "viewer";
+}
+
+function normalizeViewerPlan(value) {
+  if (!value) return null;
+  const plan = String(value);
+  if (plan === "basic" || plan === "most_popular" || plan === "family")
+    return plan;
+  return null;
+}
+
+function normalizeCreatorPlan(value) {
+  if (!value) return null;
+  const plan = String(value);
+  if (plan === "basic" || plan === "most_popular" || plan === "family")
+    return plan;
+  return null;
+}
+
+function parseFeatures(value) {
+  if (value === undefined || value === null) return [];
+
+  if (Array.isArray(value)) {
+    return value
+      .map((x) => (x === null || x === undefined ? "" : String(x).trim()))
+      .filter(Boolean);
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return [];
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (!Array.isArray(parsed)) return null;
+      return parsed
+        .map((x) => (x === null || x === undefined ? "" : String(x).trim()))
+        .filter(Boolean);
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
 export const createService = async (req, res) => {
   try {
-    const { name, description, price, features, plan } = req.body;
+    const kind = normalizeKind(req.body?.kind ?? req.query?.kind);
 
-    if (!name || !description || !price || !features || !plan) {
-      return res.status(400).json({ message: "All fields are required" });
-    }
-
-    const newService = await prisma.services.create({
-      data: {
+    if (kind === "creator") {
+      const {
         name,
         description,
-        price: parseFloat(price),
-        features: JSON.parse(features),
+        price,
+        currency,
         plan,
+        videos_per_month,
+        features,
+      } = req.body;
+
+      if (!name || price === undefined || price === null || !plan) {
+        return res
+          .status(400)
+          .json({ message: "name, price and plan are required" });
+      }
+
+      const normalizedPlan = normalizeCreatorPlan(plan);
+      if (!normalizedPlan) {
+        return res
+          .status(400)
+          .json({ message: "Invalid plan. Use basic|most_popular|family" });
+      }
+
+      const parsedPrice = Number(price);
+      if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
+        return res.status(400).json({ message: "Invalid price" });
+      }
+
+      const vpm =
+        videos_per_month === undefined ||
+        videos_per_month === null ||
+        videos_per_month === ""
+          ? null
+          : Number(videos_per_month);
+      if (vpm !== null && (!Number.isInteger(vpm) || vpm < 0)) {
+        return res
+          .status(400)
+          .json({ message: "videos_per_month must be an integer >= 0" });
+      }
+
+      const parsedFeatures = parseFeatures(features);
+      if (parsedFeatures === null || parsedFeatures.length === 0) {
+        return res.status(400).json({
+          message:
+            "features are required for creator plans (array of strings or JSON string array)",
+        });
+      }
+
+      const created = await prisma.creatorService.create({
+        data: {
+          name: String(name).trim(),
+          description: description ? String(description) : null,
+          features: parsedFeatures,
+          price: parsedPrice,
+          currency: currency ? String(currency).toLowerCase() : null,
+          plan: normalizedPlan,
+          videos_per_month: vpm,
+        },
+      });
+
+      return res.status(201).json({
+        success: true,
+        kind: "creator",
+        message: "Creator service created successfully",
+        data: created,
+      });
+    }
+
+    // Default: viewer
+    const { name, description, price, features, plan } = req.body;
+
+    if (!name || price === undefined || price === null || !plan) {
+      return res
+        .status(400)
+        .json({ message: "name, price and plan are required" });
+    }
+
+    const normalizedPlan = normalizeViewerPlan(plan);
+    if (!normalizedPlan) {
+      return res
+        .status(400)
+        .json({ message: "Invalid plan. Use basic|most_popular|family" });
+    }
+
+    const parsedPrice = Number(price);
+    if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
+      return res.status(400).json({ message: "Invalid price" });
+    }
+
+    const parsedFeatures = parseFeatures(features);
+    if (parsedFeatures === null) {
+      return res.status(400).json({
+        message:
+          "Invalid features. Send an array of strings or JSON string array",
+      });
+    }
+
+    const created = await prisma.services.create({
+      data: {
+        name: String(name).trim(),
+        description: description ? String(description) : null,
+        price: parsedPrice,
+        features: parsedFeatures,
+        plan: normalizedPlan,
       },
     });
 
     return res.status(201).json({
       success: true,
+      kind: "viewer",
       message: "Service created successfully",
-      data: newService,
+      data: created,
     });
   } catch (error) {
     console.error("Error creating service:", error);
@@ -51,12 +196,28 @@ export const createService = async (req, res) => {
 };
 export const getAllServices = async (req, res) => {
   try {
+    const kind = normalizeKind(req.query?.kind ?? req.body?.kind);
+
+    if (kind === "creator") {
+      const services = await prisma.creatorService.findMany({
+        where: { deleted_at: null },
+        orderBy: { created_at: "desc" },
+      });
+
+      return res.status(200).json({
+        success: true,
+        kind: "creator",
+        data: services,
+      });
+    }
+
     const services = await prisma.services.findMany({
       orderBy: { created_at: "desc" },
     });
 
     return res.status(200).json({
       success: true,
+      kind: "viewer",
       data: services,
     });
   } catch (error) {
@@ -67,7 +228,6 @@ export const getAllServices = async (req, res) => {
   }
 };
 export const createCategory = async (req, res) => {
-  
   try {
     const { name, slug, status } = req.body;
     if (!name || !slug) {
@@ -146,7 +306,10 @@ export const deleteCategory = async (req, res) => {
 //----------------------get all genres (dynamic from schema)----------------------
 const getGenresFromSchema = () => {
   try {
-    const schemaPath = path.join(path.dirname(__filename), "../../../prisma/schema.prisma");
+    const schemaPath = path.join(
+      path.dirname(__filename),
+      "../../../prisma/schema.prisma",
+    );
     const schemaContent = fs.readFileSync(schemaPath, "utf-8");
     const genraMatch = schemaContent.match(/enum Genra\s*\{([^}]+)\}/);
     if (genraMatch) {
@@ -240,7 +403,11 @@ export const getContentsByGenre = async (req, res) => {
       };
     });
 
-    res.json({ success: true, contents: formattedContents, count: formattedContents.length });
+    res.json({
+      success: true,
+      contents: formattedContents,
+      count: formattedContents.length,
+    });
   } catch (error) {
     console.error("Error fetching content by genre:", error);
     res.status(500).json({ error: "Failed to fetch content by genre" });
@@ -264,9 +431,7 @@ export const getPopularCategories = async (req, res) => {
           some: {},
         },
       },
-      orderBy: [
-        { contents: { _count: "desc" } },
-      ],
+      orderBy: [{ contents: { _count: "desc" } }],
       take: limit,
     });
 
@@ -286,23 +451,28 @@ export const getPopularCategories = async (req, res) => {
 
         const totalViews = contentInCategory.reduce(
           (sum, c) => sum + (c.view_count || 0),
-          0
+          0,
         );
-        
+
         const avgRating =
           contentInCategory.length > 0
             ? contentInCategory.reduce((sum, c) => {
                 const contentRatings = c.Rating || [];
-                const contentAvgRating = contentRatings.length > 0
-                  ? contentRatings.reduce((rSum, r) => rSum + (r.rating || 0), 0) / contentRatings.length
-                  : 0;
+                const contentAvgRating =
+                  contentRatings.length > 0
+                    ? contentRatings.reduce(
+                        (rSum, r) => rSum + (r.rating || 0),
+                        0,
+                      ) / contentRatings.length
+                    : 0;
                 return sum + contentAvgRating;
               }, 0) / contentInCategory.length
             : 0;
         const totalContent = contentInCategory.length;
         const recentContent = contentInCategory.filter(
           (c) =>
-            new Date(c.created_at) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+            new Date(c.created_at) >
+            new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
         ).length;
 
         // Calculate popularity score (weighted formula)
@@ -327,12 +497,12 @@ export const getPopularCategories = async (req, res) => {
           created_at: category.created_at,
           updated_at: category.updated_at,
         };
-      })
+      }),
     );
 
     // Sort by popularity score
     popularCategories.sort(
-      (a, b) => b.metrics.popularity_score - a.metrics.popularity_score
+      (a, b) => b.metrics.popularity_score - a.metrics.popularity_score,
     );
 
     return res.status(200).json({
@@ -392,22 +562,28 @@ export const getTrendingCategories = async (req, res) => {
         const newContentCount = category.contents.length;
         const viewsOnNewContent = category.contents.reduce(
           (sum, c) => sum + (c.view_count || 0),
-          0
+          0,
         );
-        
+
         const avgRatingNewContent =
           newContentCount > 0
             ? category.contents.reduce((sum, c) => {
                 const contentRatings = c.Rating || [];
-                const contentAvgRating = contentRatings.length > 0
-                  ? contentRatings.reduce((rSum, r) => rSum + (r.rating || 0), 0) / contentRatings.length
-                  : 0;
+                const contentAvgRating =
+                  contentRatings.length > 0
+                    ? contentRatings.reduce(
+                        (rSum, r) => rSum + (r.rating || 0),
+                        0,
+                      ) / contentRatings.length
+                    : 0;
                 return sum + contentAvgRating;
               }, 0) / newContentCount
             : 0;
 
         const trendScore =
-          newContentCount * 20 + viewsOnNewContent * 0.2 + avgRatingNewContent * 50;
+          newContentCount * 20 +
+          viewsOnNewContent * 0.2 +
+          avgRatingNewContent * 50;
 
         return {
           id: category.id,
@@ -440,4 +616,30 @@ export const getTrendingCategories = async (req, res) => {
   }
 };
 
+// export const createChannelCategory = async (req, res) => {
+//   try {
+//     const { userId, role } = req.user;
+//     if (role !== "admin") {
+//       return res.status(403).json({ message: "Forbidden: Admins only" });
+//     }
 
+//     const { name, slug, status } = req.body;
+//     if (!name || !slug) {
+//       return res.status(400).json({ message: "Name and slug are required" });
+//     }
+
+//     const category = await prisma.channelCategory.create({
+//       data: {
+//         name,
+//         slug,
+//         status: status ?? 1,
+//       },
+//     });
+
+//     return res.status(201).json({ success: true, data: category });
+//   } catch (error) {
+//     return res
+//       .status(500)
+//       .json({ message: "Internal Server Error", error: error.message });
+//   }
+// };

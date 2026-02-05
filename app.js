@@ -18,6 +18,11 @@ import favouriteRoutes from "./modules/Favourite/favourite.route.js";
 import downloadRoutes from "./modules/Download/download.route.js";
 import adminSettingsRoutes from "./modules/admin/settings/admin_settigns.route.js";
 import supportRoutes from "./modules/helpSupport/support.route.js";
+import notificationRoutes from "./modules/notifications/notification.route.js";
+import creatorChannelRoutes from "./modules/creator/creator_channel.route.js";
+import creatorUploadRoutes from "./modules/creator/uploads/creator_upload.route.js";
+import adminCreatorChannelRoutes from "./modules/admin/creator_channels/creator_channels.route.js";
+import adminCreatorContentRoutes from "./modules/admin/creator_content/creator_content.route.js";
 import { swaggerSpec } from "./swagger/index.js";
 import swaggerUi from "swagger-ui-express";
 import { sendEmail } from "./utils/mailService.js";
@@ -242,6 +247,7 @@ app.use(morgan("dev"));
 
 //Use routes
 app.use("/api/users", userRoutes);
+app.use("/api/users", notificationRoutes);
 app.use("/api/uploads", uploadsRoutes);
 app.use("/api/contents", contentsRoute);
 app.use("/api/contents/user", userContentsRoute);
@@ -255,6 +261,12 @@ app.use("/api/favourites", favouriteRoutes);
 app.use("/api/downloads", downloadRoutes);
 app.use("/api/storage", downloadRoutes);
 app.use("/api/support", supportRoutes);
+
+// Creator flow
+app.use("/api/creator", creatorChannelRoutes);
+app.use("/api/creator/uploads", creatorUploadRoutes);
+app.use("/api/admin/creator", adminCreatorChannelRoutes);
+app.use("/api/admin/creator", adminCreatorContentRoutes);
 
 //Resolve __dirname for ESM
 const __filename = fileURLToPath(import.meta.url);

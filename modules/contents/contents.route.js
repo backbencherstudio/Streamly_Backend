@@ -1,5 +1,6 @@
 import express from "express";
 import { verifyUser } from "../../middlewares/verifyUsers.js";
+import { verifySubscribed } from "../../middlewares/verifySubscribed.js";
 import {
   getHomeSections,
   getRecommendedForUser,
@@ -38,16 +39,25 @@ router.get("/upcoming-by-category", getUpcomingByCategory);
 router.get("/trending", getTrendingContent);
 
 // Recommendations based on favourites & ratings
-router.get("/recommended", verifyUser("normal", "premium"), getRecommendedForUser);
+router.get(
+  "/recommended",
+  verifyUser("normal", "premium", "creator"),
+  getRecommendedForUser
+);
 
 // Browse by genre with pagination
-router.get("/genre/:genre", verifyUser("normal", "premium"), getByGenre);
+router.get("/genre/:genre", verifyUser("normal", "premium", "creator"), getByGenre);
 
 // Watch details for a given content id
-router.get("/watch/:id", verifyUser("normal", "premium"), getContentToWatch);
+router.get("/watch/:id", verifyUser("normal", "premium", "creator"), getContentToWatch);
 
 // Offline download link (premium only)
-router.get("/download/:id", verifyUser("premium"), getDownloadLink);
+router.get(
+  "/download/:id",
+  verifyUser("normal", "premium", "creator"),
+  verifySubscribed,
+  getDownloadLink
+);
 
 // ============ SEARCH & BROWSE ENDPOINTS ============
 

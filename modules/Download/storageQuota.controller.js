@@ -1,7 +1,5 @@
 import { PrismaClient } from "@prisma/client";
 import {
-  STORAGE_TIERS,
-  getStorageTierLimit,
   formatBytes,
   getUserStorageInfo,
   upgradeStorageQuota,
@@ -22,18 +20,17 @@ const serialize = (data) =>
  */
 export const getUserQuota = async (req, res) => {
   try {
-    const { userId, role } = req.user;
+    const { userId } = req.user;
 
-    // Only premium users have storage quota
-    if (role !== "premium") {
+    // Only subscribed users have storage quota
+    const storageInfo = await getUserStorageInfo(userId);
+    if (!storageInfo) {
       return res.status(403).json({
         success: false,
-        message: "Storage quota is only available for premium users",
+        message: "Storage quota is only available for subscribed users",
         upgrade_required: true,
       });
     }
-
-    const storageInfo = await getUserStorageInfo(userId);
 
     res.status(200).json({
       success: true,
@@ -55,24 +52,35 @@ export const getUserQuota = async (req, res) => {
  */
 export const upgradeQuota = async (req, res) => {
   try {
-    const { userId, role } = req.user;
+    const { userId } = req.user;
+    const { plan } = req.body;
 
-    // Only premium users can manage quota
-    if (role !== "premium") {
+    const activeSub = await prisma.subscription.findFirst({
+      where: { user_id: userId, status: "active" },
+      select: { plan: true },
+    });
+    if (!activeSub) {
       return res.status(403).json({
         success: false,
-        message: "Storage quota is only available for premium users",
+        message: "Active subscription required to manage storage quota",
         upgrade_required: true,
       });
     }
 
-    const { tier } = req.body;
-
-    // CRITICAL: Only allow premium and family tiers - NEVER free
-    if (!tier || !["premium", "family"].includes(tier)) {
+    if (plan && plan !== activeSub.plan) {
       return res.status(400).json({
         success: false,
-        message: "Invalid storage tier. Must be 'premium' or 'family' (free tier not allowed)",
+        message: "Requested plan does not match active subscription plan",
+      });
+    }
+
+    const effectivePlan = plan || activeSub.plan;
+
+    // Only subscribed users can manage quota
+    if (!["most_popular", "basic", "family"].includes(effectivePlan)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid plan. Must be 'most_popular', 'basic', or 'family'",
       });
     }
 
@@ -82,7 +90,7 @@ export const upgradeQuota = async (req, res) => {
 
     if (!currentQuota) {
       // Create new quota
-      const newQuota = await createUserStorageQuota(userId, tier);
+      const newQuota = await createUserStorageQuota(userId, effectivePlan);
       return res.status(201).json({
         success: true,
         message: "Storage quota created",
@@ -90,21 +98,21 @@ export const upgradeQuota = async (req, res) => {
       });
     }
 
-    // Check if trying to downgrade
-    const tierLevels = { free: 0, premium: 1, family: 2 };
-    if (tierLevels[tier] < tierLevels[currentQuota.tier]) {
+    // Prevent downgrade (optional, can be removed if not needed)
+    const planLevels = { No_plan: 0, basic: 1, most_popular: 2, family: 3 };
+    if (planLevels[effectivePlan] < planLevels[currentQuota.tier]) {
       return res.status(400).json({
         success: false,
-        message: "Cannot downgrade storage tier",
+        message: "Cannot downgrade storage plan",
       });
     }
 
     // Upgrade quota
-    const upgradedQuota = await upgradeStorageQuota(userId, tier);
+    const upgradedQuota = await upgradeStorageQuota(userId, effectivePlan);
 
     res.status(200).json({
       success: true,
-      message: `Storage upgraded to ${tier}`,
+      message: `Storage upgraded to ${effectivePlan}`,
       quota: serialize(upgradedQuota),
     });
   } catch (error) {
@@ -123,13 +131,17 @@ export const upgradeQuota = async (req, res) => {
  */
 export const updateQuotaSettings = async (req, res) => {
   try {
-    const { userId, role } = req.user;
+    const { userId } = req.user;
 
-    // Only premium users can customize settings
-    if (role !== "premium") {
+    // Only users with initialized quota can customize settings
+    const quota = await prisma.userStorageQuota.findUnique({
+      where: { user_id: userId },
+      select: { id: true },
+    });
+    if (!quota) {
       return res.status(403).json({
         success: false,
-        message: "Storage settings are only available for premium users",
+        message: "Storage settings are only available for subscribed users",
         upgrade_required: true,
       });
     }
@@ -187,19 +199,10 @@ export const getRemainingStorage = async (req, res) => {
   try {
     const { userId, role } = req.user;
 
-    // Only premium users have storage
-    if (role !== "premium") {
-      return res.status(403).json({
-        success: false,
-        message: "Storage quota is only available for premium users",
-        upgrade_required: true,
-      });
-    }
-
+    // Only subscribed users have storage
     const quota = await prisma.userStorageQuota.findUnique({
       where: { user_id: userId },
     });
-
     if (!quota) {
       return res.status(404).json({
         success: false,
@@ -214,11 +217,8 @@ export const getRemainingStorage = async (req, res) => {
         status: "completed",
         deleted_at: null,
       },
-      _sum: {
-        file_size_bytes: true,
-      },
+      _sum: { file_size_bytes: true },
     });
-
     const usedStorage = result._sum.file_size_bytes || BigInt(0);
     const remainingStorage = quota.total_storage_bytes - usedStorage;
 
@@ -245,30 +245,40 @@ export const getRemainingStorage = async (req, res) => {
 
 /**
  * POST /api/storage/quota/initialize
- * Initialize storage quota for user (ONLY call this when user subscribes to premium)
+ * Initialize storage quota for user (normally created automatically after subscription succeeds)
  * CRITICAL: This endpoint should ONLY be called from payment success handler
- * when user upgrades to premium tier, NOT on signup for normal users
+ * when user becomes subscribed, NOT on signup
  */
 export const initializeQuota = async (req, res) => {
   try {
-    const { userId, role } = req.user;
+    const { userId } = req.user;
+    const { plan } = req.body;
 
-    // Only premium users can have storage quota
-    if (role !== "premium") {
+    const activeSub = await prisma.subscription.findFirst({
+      where: { user_id: userId, status: "active" },
+      select: { plan: true },
+    });
+    if (!activeSub) {
       return res.status(403).json({
         success: false,
-        message: "Storage quota is only available for premium users",
+        message: "Active subscription required to initialize storage quota",
         upgrade_required: true,
       });
     }
 
-    // CRITICAL: Only allow premium and family tiers, never free
-    const { tier = "premium" } = req.body;
-    
-    if (!["premium", "family"].includes(tier)) {
+    if (plan && plan !== activeSub.plan) {
       return res.status(400).json({
         success: false,
-        message: "Invalid tier. Only 'premium' or 'family' allowed for initialization",
+        message: "Requested plan does not match active subscription plan",
+      });
+    }
+
+    const effectivePlan = plan || activeSub.plan;
+
+    if (!["most_popular", "basic", "family"].includes(effectivePlan)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid plan. Only 'most_popular', 'basic', or 'family' allowed for initialization",
       });
     }
 
@@ -276,7 +286,6 @@ export const initializeQuota = async (req, res) => {
     const existingQuota = await prisma.userStorageQuota.findUnique({
       where: { user_id: userId },
     });
-
     if (existingQuota) {
       return res.status(400).json({
         success: false,
@@ -285,7 +294,7 @@ export const initializeQuota = async (req, res) => {
     }
 
     // Create new quota
-    const newQuota = await createUserStorageQuota(userId, tier);
+    const newQuota = await createUserStorageQuota(userId, effectivePlan);
 
     res.status(201).json({
       success: true,

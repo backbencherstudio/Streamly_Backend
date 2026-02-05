@@ -40,4 +40,6 @@ router.get("/getAllGenres", getAllGenres);
 router.get("/getContentsByGenre/:genre", getContentsByGenre);
 
 
+
+
 export default router;

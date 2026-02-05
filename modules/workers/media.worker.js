@@ -5,6 +5,8 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import util from 'util';
+import { execFile } from 'node:child_process';
+import ffprobeStatic from 'ffprobe-static';
 import { Upload } from '@aws-sdk/lib-storage';
 import { s3 } from '../libs/s3Clinent.js';
 import { PrismaClient } from '@prisma/client';
@@ -13,6 +15,7 @@ import { connection } from '../libs/queue.js';
 const prisma = new PrismaClient();
 const unlink = util.promisify(fs.unlink);
 const stat = util.promisify(fs.stat);
+const execFileAsync = util.promisify(execFile);
 
 const bucket = process.env.AWS_S3_BUCKET;
 const partSize = (Number(process.env.UPLOAD_PART_SIZE_MB) || 10) * 1024 * 1024;
@@ -53,6 +56,25 @@ async function generateChecksum(localPath) {
   });
 }
 
+async function probeDurationSeconds(localPath) {
+  const ffprobePath = ffprobeStatic?.path;
+  if (!ffprobePath) return null;
+
+  try {
+    const { stdout } = await execFileAsync(
+      ffprobePath,
+      ['-v', 'error', '-show_entries', 'format=duration', '-of', 'json', localPath],
+      { windowsHide: true, maxBuffer: 1024 * 1024 },
+    );
+    const parsed = JSON.parse(stdout || '{}');
+    const seconds = Number(parsed?.format?.duration);
+    return Number.isFinite(seconds) && seconds > 0 ? seconds : null;
+  } catch (e) {
+    console.warn('[ffprobe] duration probe failed:', e?.message || e);
+    return null;
+  }
+}
+
 // Utility function to upload to S3
 // Allows specifying a prefix (e.g. "videos" or "thumbnails")
 async function uploadToS3(localPath, contentId, ext, mime, prefix = 'videos') {
@@ -89,7 +111,7 @@ const worker = new Worker('media', async (job) => {
   if (job.name !== 'push-to-s3') return;
   const { contentId, localPath, thumbnailPath } = job.data;
 
-  let durationSec = 0; 
+  let durationSec = null;
   try {
     console.log('[job] start', { contentId, localPath, bucket });
 
@@ -105,6 +127,9 @@ const worker = new Worker('media', async (job) => {
     const fileInfo = await stat(localPath);
     const ext = path.extname(localPath).toLowerCase();
     const mime = getMimeType(ext);
+
+    // Duration (best-effort). If ffprobe isn't available or fails, keep it null.
+    durationSec = await probeDurationSeconds(localPath);
 
     const checksum = await generateChecksum(localPath);
 
@@ -141,7 +166,7 @@ const worker = new Worker('media', async (job) => {
     await prisma.content.update({
       where: { id: contentId },
       data: {
-        duration_seconds: Math.round(durationSec || 0),
+        duration_seconds: durationSec ? Math.round(durationSec) : null,
         content_status: 'published',
         file_size_bytes: BigInt(fileInfo.size),
       },

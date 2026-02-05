@@ -42,16 +42,18 @@ const serialize = (data) =>
  */
 export const startDownload = async (req, res) => {
   try {
-    const { userId, role } = req.user;
+    const { userId } = req.user;
 
-    // Only premium users can download
-    if (role !== "premium") {
-      return res.status(403).json({
-        success: false,
-        message: "Download feature is only available for premium users",
-        upgrade_required: true,
-      });
-    }
+    // Optionally, fetch user's plan from their subscription/quota here
+    // Example:
+    // const userQuota = await prisma.userStorageQuota.findUnique({ where: { user_id: userId } });
+    // if (!userQuota || !["most_popular", "basic", "family"].includes(userQuota.tier)) {
+    //   return res.status(403).json({
+    //     success: false,
+    //     message: "Download feature is only available for subscribed users",
+    //     upgrade_required: true,
+    //   });
+    // }
 
     const { content_id, quality = "720p" } = req.body;
 
@@ -67,6 +69,7 @@ export const startDownload = async (req, res) => {
       where: {
         id: content_id,
         content_status: "published",
+        review_status: "approved",
         deleted_at: null,
       },
       select: {
@@ -95,11 +98,7 @@ export const startDownload = async (req, res) => {
       },
     });
 
-    // Allow re-download if:
-    // 1. No existing download
-    // 2. Previous download was deleted (soft-deleted)
-    // 3. Previous download failed
-    // 4. Previous download was cancelled
+
     if (existingDownload) {
       const isDeleted = existingDownload.deleted_at !== null;
       const canRetry = ["failed", "cancelled"].includes(existingDownload.status);
@@ -119,7 +118,7 @@ export const startDownload = async (req, res) => {
     // Check storage quota
     const quotaCheck = await checkQuotaAvailable(userId, downloadSize);
     if (!quotaCheck.available) {
-      return res.status(413).json({
+      return res.status(quotaCheck.status || 413).json({
         success: false,
         message: quotaCheck.reason,
         details: quotaCheck,
@@ -574,17 +573,8 @@ export const deleteDownload = async (req, res) => {
  */
 export const getStorageDashboard = async (req, res) => {
   try {
-    const { userId, role } = req.user;
+    const { userId } = req.user;
     const { page = 1, take = 20 } = req.query;
-
-    // Only premium users have storage
-    if (role !== "premium") {
-      return res.status(403).json({
-        success: false,
-        message: "Storage feature is only available for premium users",
-        upgrade_required: true,
-      });
-    }
 
     const storageInfo = await getUserStorageInfo(userId);
     const alertStatus = await getStorageAlertStatus(userId);
@@ -695,15 +685,19 @@ export const getStorageDashboard = async (req, res) => {
  */
 export const deleteAllDownloads = async (req, res) => {
   try {
-    const { userId, role } = req.user;
+    const { userId } = req.user;
 
     console.log("hit this for all download");
 
-    // Only premium users can cleanup
-    if (role !== "premium") {
+    // Only users with initialized quota can use download storage
+    const quota = await prisma.userStorageQuota.findUnique({
+      where: { user_id: userId },
+      select: { id: true },
+    });
+    if (!quota) {
       return res.status(403).json({
         success: false,
-        message: "Storage cleanup is only available for premium users",
+        message: "Storage quota is not initialized for this user",
         upgrade_required: true,
       });
     }

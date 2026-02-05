@@ -10,11 +10,12 @@ import {
   changePassword,
   sendMailToAdmin,
   getMe,
-  googleLogin, 
+  googleLogin,
   googleCallback,
   authenticateUser,
   updatePassword,
-  getAllNotifications
+  resendForgotPasswordOTP,
+  deleteUser,
 } from "./user.controller.js";
 import { upload } from "../../config/Multer.config.js";
 import { verifyUser } from "../../middlewares/verifyUsers.js";
@@ -60,6 +61,7 @@ router.get("/auth/google/logout", (req, res) => {
 
 // Forget password
 router.post("/forget_pass", forgotPasswordOTPsend);
+router.post("/resetPassOtpSend", resendForgotPasswordOTP);
 router.post("/checkForgetPassOtp", verifyForgotPasswordOTP);
 router.post("/resetPass", resetPassword);
 router.post("/change-password", verifyUser("normal"), changePassword);
@@ -68,23 +70,23 @@ router.post("/change-password", verifyUser("normal"), changePassword);
 router.put(
   "/update-user-details",
   verifyUser("normal", "premium", "admin"),
-  updateUserDetails
+  updateUserDetails,
 );
 
 router.put(
   "/update-image",
   upload.single("profilePicture"),
-  verifyUser("normal", "premium", "admin"),
-  updateImage
+  verifyUser("ANY"),
+  updateImage,
 );
 
 // Support
 router.post("/sende-mail", verifyUser("normal"), sendMailToAdmin);
 
 //get me
-router.get("/get-me",authenticateUser, getMe);
+router.get("/get-me", authenticateUser, getMe);
 //update pass;
-router.put('/updatePass', authenticateUser ,updatePassword )
+router.put("/updatePass", authenticateUser, updatePassword);
+router.delete("/delete", authenticateUser, deleteUser);
 
-router.get('/getAllNotifications', authenticateUser, getAllNotifications);
 export default router;

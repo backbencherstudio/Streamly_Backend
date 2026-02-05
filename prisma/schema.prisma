@@ -36,7 +36,37 @@ enum Status {
 enum Role {
   normal
   premium
+  creator
   admin
+}
+
+enum CreatorPlan {
+  basic
+  family
+  most_popular
+}
+
+enum CreatorChannelStatus {
+  pending
+  approved
+  rejected
+}
+
+enum ReviewStatus {
+  pending
+  approved
+  rejected
+}
+
+enum ChannelCategory {
+  Entertainment
+  Comedy
+  Music
+  Gaming
+  Sports
+  News
+  Education
+  Vlogs
 }
 
 model User {
@@ -74,6 +104,12 @@ model User {
   sender_notifications   Notification[] @relation("sender")
   Subscription           Subscription[]
 
+  CreatorSubscription     CreatorSubscription[]
+  creatorChannel          CreatorChannel?
+  reviewedCreatorChannels CreatorChannel[]      @relation("creatorChannelReviewedBy")
+  createdContents         Content[]             @relation("contentCreatedBy")
+  reviewedContents        Content[]             @relation("contentReviewedBy")
+
   UserPaymentMethod  UserPaymentMethod[]
   orders             Order[]
   PaymentTransaction PaymentTransaction[]
@@ -89,6 +125,86 @@ model User {
   storageQuota          UserStorageQuota?
 
   @@map("users")
+}
+
+model CreatorService {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  name        String
+  description String?
+  features    String[]
+  price       Float
+  currency    String?
+
+  plan             CreatorPlan
+  videos_per_month Int?
+
+  stripe_product_id String? @unique
+  stripe_price_id   String? @unique
+
+  subscriptions CreatorSubscription[]
+
+  @@map("creator_services")
+}
+
+model CreatorSubscription {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  user_id String
+  user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  creator_service_id String?
+  service            CreatorService? @relation(fields: [creator_service_id], references: [id])
+
+  renewal_date   DateTime?
+  plan           CreatorPlan
+  payment_method Payment_method @default(No_pay)
+  transaction_id String         @unique // Stripe subscription id
+  status         Status         @default(active)
+  start_date     DateTime       @default(now())
+  end_date       DateTime?
+
+  PaymentTransaction PaymentTransaction[]
+
+  @@index([user_id, status])
+  @@map("creator_subscriptions")
+}
+
+model CreatorChannel {
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  deleted_at DateTime?
+
+  user_id String @unique
+  user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  name   String
+  slug   String  @unique
+  bio    String?
+  avatar String?
+  banner String?
+
+  channel_category ChannelCategory?
+
+  sample_video_link String?
+
+  status              CreatorChannelStatus @default(pending)
+  reviewed_by_user_id String?
+  reviewed_by         User?                @relation("creatorChannelReviewedBy", fields: [reviewed_by_user_id], references: [id])
+  reviewed_at         DateTime?
+  review_note         String?
+
+  contents Content[]
+
+  @@index([status])
+  @@map("creator_channels")
 }
 
 model UserPaymentMethod {
@@ -154,6 +270,9 @@ model PaymentTransaction {
 
   subscription_id String?
   subscription    Subscription? @relation(fields: [subscription_id], references: [id])
+
+  creator_subscription_id String?
+  creator_subscription    CreatorSubscription? @relation(fields: [creator_subscription_id], references: [id])
 
   // --- Stripe / Provider identifiers (🔒 make processing idempotent & auditable) ---
   provider                   String?
@@ -253,13 +372,17 @@ model Subscription {
 }
 
 model Services {
-  id           String         @id @default(cuid())
-  created_at   DateTime       @default(now())
-  name         String
-  description  String?
-  price        Float
-  features     String[]
-  plan         Plan
+  id          String   @id @default(cuid())
+  created_at  DateTime @default(now())
+  name        String
+  description String?
+  price       Float
+  features    String[]
+  plan        Plan
+
+  stripe_product_id String? @unique
+  stripe_price_id   String? @unique
+
   Subscription Subscription[]
 
   @@map("services")
@@ -352,9 +475,9 @@ enum ContentType {
 }
 
 model Content {
-  id         String   @id @default(cuid())
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
+  id         String    @id @default(cuid())
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
   deleted_at DateTime?
 
   title       String?
@@ -407,8 +530,21 @@ model Content {
   Favourite   Favourite[]
   ContentView ContentView[]
   Cast        Cast[]
-  downloads   Download[]  @relation("UserDownloads")
+  downloads   Download[]    @relation("UserDownloads")
 
+  created_by_user_id String?
+  created_by         User?   @relation("contentCreatedBy", fields: [created_by_user_id], references: [id])
+
+  review_status       ReviewStatus @default(approved)
+  reviewed_by_user_id String?
+  reviewed_by         User?        @relation("contentReviewedBy", fields: [reviewed_by_user_id], references: [id])
+  reviewed_at         DateTime?
+  review_note         String?
+
+  creator_channel_id String?
+  creator_channel    CreatorChannel? @relation(fields: [creator_channel_id], references: [id])
+
+  @@unique([series_id, season_number, episode_number])
   @@index([category_id])
   @@index([is_premium])
   // @@index([status])
@@ -416,7 +552,6 @@ model Content {
   @@index([series_id])
   @@index([view_count])
   @@index([deleted_at])
-  @@unique([series_id, season_number, episode_number])
 }
 
 model ContentView {
@@ -625,9 +760,10 @@ enum DownloadStatus {
 }
 
 enum StorageTier {
-  free      // 5 GB
-  premium   // 50 GB
-  family    // 100 GB
+  basic // 5 GB
+  most_popular // 50 GB
+  family // 100 GB
+  No_plan // 0 GB (typically means no quota record)
 }
 
 model Download {
@@ -642,16 +778,16 @@ model Download {
   content_id String
   content    Content @relation("UserDownloads", fields: [content_id], references: [id], onDelete: Cascade)
 
-  status            DownloadStatus @default(pending)
-  quality           String? // "480p", "720p", "1080p", "4k"
-  progress          Int            @default(0) // 0-100 percentage
-  file_size_bytes   BigInt?
-  downloaded_bytes  BigInt         @default(0)
-  expires_at        DateTime? // When download will auto-delete (optional)
-  
+  status           DownloadStatus @default(pending)
+  quality          String? // "480p", "720p", "1080p", "4k"
+  progress         Int            @default(0) // 0-100 percentage
+  file_size_bytes  BigInt?
+  downloaded_bytes BigInt         @default(0)
+  expires_at       DateTime? // When download will auto-delete (optional)
+
   // File storage paths
-  file_path         String? // Local: /downloads/users/{userId}/{contentId}.mp4
-  s3_key            String? // S3: users/{userId}/{contentId}.mp4 (for future migration)
+  file_path String? // Local: /downloads/users/{userId}/{contentId}.mp4
+  s3_key    String? // S3: users/{userId}/{contentId}.mp4 (for future migration)
 
   // Error tracking
   error_message String?
@@ -664,14 +800,14 @@ model Download {
 }
 
 model UserStorageQuota {
-  id         String    @id @default(cuid())
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 
-  user_id String    @unique
-  user    User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_id String @unique
+  user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
-  tier                   StorageTier @default(premium) // premium|family (premium-only, no free tier)
+  tier                   StorageTier @default(No_plan)
   total_storage_bytes    BigInt // Total allowed storage
   used_storage_bytes     BigInt      @default(0) // Currently used storage
   auto_delete_enabled    Boolean     @default(true) // Auto-delete old downloads
