@@ -16,7 +16,15 @@ export const verifyUser = (...allowedRoles) => {
     }
 
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const secret = process.env.JWT_SECRET || process.env.JWT_SECRET_KEY;
+      if (!secret) {
+        return res.status(500).json({
+          message:
+            "Server misconfiguration: JWT secret is not set. Configure JWT_SECRET (recommended) or JWT_SECRET_KEY.",
+        });
+      }
+
+      const decoded = jwt.verify(token, secret);
       req.user = decoded;
 
       if (

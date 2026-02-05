@@ -2,12 +2,18 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-// Storage tier limits (in bytes)
-export const STORAGE_TIERS = {
-  free: 5 * 1024 * 1024 * 1024, // 5 GB
-  premium: 50 * 1024 * 1024 * 1024, // 50 GB
-  family: 100 * 1024 * 1024 * 1024, // 100 GB
+// Storage plan limits (in bytes) mapped to Subscription Plan
+export const PLAN_STORAGE_LIMITS = {
+  most_popular: 50 * 1024 * 1024 * 1024, // 50 GB
+  basic: 5 * 1024 * 1024 * 1024,         // 5 GB
+  family: 100 * 1024 * 1024 * 1024,      // 100 GB
+  No_plan: 0,
 };
+
+// Helper: get storage limit by plan
+export function getStorageLimitByPlan(plan = "most_popular") {
+  return PLAN_STORAGE_LIMITS[plan] ?? PLAN_STORAGE_LIMITS["most_popular"];
+}
 
 // Quality file size estimates (multiplier for content file size)
 export const QUALITY_MULTIPLIERS = {
@@ -31,11 +37,6 @@ export const formatBytes = (bytes) => {
   return parseFloat((numBytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 };
 
-// Get storage tier limits
-// NOTE: Free tier is only for reference. Users must be premium to have any storage access
-export const getStorageTierLimit = (tier = "premium") => {
-  return STORAGE_TIERS[tier] || STORAGE_TIERS.premium;
-};
 
 // Calculate file size based on quality
 export const calculateDownloadSize = (originalFileSize, quality = "720p") => {
@@ -73,25 +74,57 @@ export const checkQuotaAvailable = async (userId, requiredBytes) => {
     });
 
     if (!quota) {
-      return { available: false, reason: "Storage quota not initialized" };
+      return {
+        available: false,
+        status: 403,
+        code: "SUBSCRIPTION_REQUIRED",
+        reason: "Subscription required",
+        upgrade_required: true,
+      };
+    }
+
+    if (!quota.total_storage_bytes || quota.total_storage_bytes <= BigInt(0)) {
+      return {
+        available: false,
+        status: 403,
+        code: "SUBSCRIPTION_REQUIRED",
+        reason: "Subscription required",
+        upgrade_required: true,
+      };
     }
 
     const usedStorage = await calculateStorageUsed(userId);
-    const availableStorage = quota.total_storage_bytes - usedStorage;
+    const availableStorageRaw = quota.total_storage_bytes - usedStorage;
+    const availableStorage = availableStorageRaw < BigInt(0) ? BigInt(0) : availableStorageRaw;
+
+    const usedPercent = Number(
+      (usedStorage * BigInt(100)) / (quota.total_storage_bytes || BigInt(1))
+    );
 
     if (availableStorage < requiredBytes) {
       return {
         available: false,
+        status: 413,
+        code: "INSUFFICIENT_STORAGE",
         reason: "Insufficient storage space",
         required: formatBytes(requiredBytes),
         available: formatBytes(availableStorage),
+        used: formatBytes(usedStorage),
+        total: formatBytes(quota.total_storage_bytes),
+        used_percent: usedPercent,
+        tier: quota.tier,
       };
     }
 
     return { available: true };
   } catch (error) {
     console.error("Error checking quota:", error);
-    return { available: false, reason: "Error checking storage quota" };
+    return {
+      available: false,
+      status: 500,
+      code: "QUOTA_CHECK_FAILED",
+      reason: "Error checking storage quota",
+    };
   }
 };
 
@@ -103,7 +136,7 @@ export const getUserStorageInfo = async (userId) => {
     });
 
     if (!quota) {
-      // No storage access for non-premium users
+      // No storage access unless quota exists
       return null;
     }
 
@@ -140,20 +173,19 @@ const formatStorageInfo = async (quota) => {
   };
 };
 
-// Create user storage quota (called when user subscribes to premium)
-// IMPORTANT: Only premium users should have storage quota
-export const createUserStorageQuota = async (userId, tier = "premium") => {
-  // Enforce premium tier - never create free tier for users
-  const validTier = tier === "premium" || tier === "family" ? tier : "premium";
-  
+// Create user storage quota (called when user subscribes to a plan)
+export const createUserStorageQuota = async (userId, plan = "most_popular") => {
   try {
     return await prisma.userStorageQuota.upsert({
       where: { user_id: userId },
-      update: { tier: validTier },
+      update: {
+        tier: plan, // Store the plan name directly as the tier
+        total_storage_bytes: getStorageLimitByPlan(plan),
+      },
       create: {
         user_id: userId,
-        tier: validTier,
-        total_storage_bytes: getStorageTierLimit(validTier),
+        tier: plan, // Store the plan name directly as the tier
+        total_storage_bytes: getStorageLimitByPlan(plan),
         used_storage_bytes: BigInt(0),
       },
     });
@@ -164,13 +196,13 @@ export const createUserStorageQuota = async (userId, tier = "premium") => {
 };
 
 // Update user storage quota tier (e.g., on subscription upgrade)
-export const upgradeStorageQuota = async (userId, newTier) => {
+export const upgradeStorageQuota = async (userId, plan = "most_popular") => {
   try {
     return await prisma.userStorageQuota.update({
       where: { user_id: userId },
       data: {
-        tier: newTier,
-        total_storage_bytes: getStorageTierLimit(newTier),
+        tier: plan, // Store the plan name directly as the tier
+        total_storage_bytes: getStorageLimitByPlan(plan),
       },
     });
   } catch (error) {

@@ -46,10 +46,86 @@ export const deleteUser = async (req, res) => {
   const { id } = req.params;
   console.log("id:", id);
   try {
-    const user = await prisma.user.delete({
-      where: { id: id },
+    const existingUser = await prisma.user.findUnique({
+      where: { id },
+      select: { id: true, email: true, deleted_at: true },
     });
-    res.json(user, { message: "User deleted successfully" });
+
+    if (!existingUser) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    if (existingUser.deleted_at) {
+      return res.json({ success: true, message: "User already deleted" });
+    }
+
+    const deletedAt = new Date();
+    const anonymizedEmail = `deleted+${id}@example.invalid`;
+
+    await prisma.$transaction(async (tx) => {
+      await tx.notification.updateMany({
+        where: {
+          deleted_at: null,
+          OR: [{ sender_id: id }, { receiver_id: id }],
+        },
+        data: { deleted_at: deletedAt },
+      });
+
+      await tx.download.updateMany({
+        where: { user_id: id, deleted_at: null },
+        data: { deleted_at: deletedAt, status: "cancelled" },
+      });
+
+      await tx.userStorageQuota.deleteMany({ where: { user_id: id } });
+      await tx.favourite.deleteMany({ where: { user_id: id } });
+      await tx.rating.updateMany({
+        where: { user_id: id, deleted_at: null },
+        data: { deleted_at: deletedAt },
+      });
+      await tx.helpSupport.updateMany({
+        where: { user_id: id, deleted_at: null },
+        data: { deleted_at: deletedAt },
+      });
+      await tx.userSetting.updateMany({
+        where: { user_id: id, deleted_at: null },
+        data: { deleted_at: deletedAt },
+      });
+      await tx.userPaymentMethod.updateMany({
+        where: { user_id: id, deleted_at: null },
+        data: { deleted_at: deletedAt },
+      });
+      await tx.paymentTransaction.updateMany({
+        where: { user_id: id, deleted_at: null },
+        data: { deleted_at: deletedAt },
+      });
+      await tx.order.updateMany({
+        where: { user_id: id },
+        data: { status: "inactive", order_status: "canceled" },
+      });
+      await tx.subscription.updateMany({
+        where: { user_id: id },
+        data: {
+          status: "deactivated",
+          plan: "No_plan",
+          end_date: deletedAt,
+          renewal_date: null,
+        },
+      });
+
+      await tx.user.update({
+        where: { id },
+        data: {
+          deleted_at: deletedAt,
+          status: "deactivated",
+          email: anonymizedEmail,
+          password: null,
+          name: null,
+          avatar: null,
+        },
+      });
+    });
+
+    return res.json({ success: true, message: "User deleted successfully" });
   } catch (err) {
     res.status(500).json({ error: "Failed to delete user" });
     console.log("Error deleting user:", err);
