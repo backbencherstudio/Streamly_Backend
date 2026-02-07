@@ -5,6 +5,7 @@ import { fileURLToPath } from "url";
 import { randomUUID } from "crypto";
 import { s3 } from "../libs/s3Clinent.js";
 import { PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { sendNotifications } from "../../utils/notificationService.js";
 
 const prisma = new PrismaClient();
 
@@ -705,6 +706,21 @@ export const requestCreatorChannel = async (req, res) => {
             ...data,
           },
         });
+
+    try {
+      const admins = await prisma.user.findMany({
+        where: { role: "admin", deleted_at: null },
+        select: { id: true },
+      });
+      await sendNotifications({
+        receiverIds: admins.map((a) => a.id),
+        type: "creator_channel.submitted",
+        entityId: channel.id,
+        text: `New creator channel request: ${channel.name}`,
+      });
+    } catch (e) {
+      console.error("Error notifying admins for channel request:", e);
+    }
 
     const creatorSub = await prisma.creatorSubscription.findFirst({
       where: { user_id: userId, status: "active" },

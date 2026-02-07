@@ -11,6 +11,7 @@ import { Upload } from '@aws-sdk/lib-storage';
 import { s3 } from '../libs/s3Clinent.js';
 import { PrismaClient } from '@prisma/client';
 import { connection } from '../libs/queue.js';
+import { sendNotification } from '../../utils/notificationService.js';
 
 const prisma = new PrismaClient();
 const unlink = util.promisify(fs.unlink);
@@ -44,6 +45,25 @@ async function markFailed(contentId, reason) {
       where: { id: contentId },
       data: { content_status: 'failed' },
     });
+  }
+
+  try {
+    const content = await prisma.content.findUnique({
+      where: { id: contentId },
+      select: { id: true, title: true, created_by_user_id: true },
+    });
+    if (content?.created_by_user_id) {
+      await sendNotification({
+        receiverId: content.created_by_user_id,
+        type: 'content.publish_failed',
+        entityId: content.id,
+        text: content.title
+          ? `Publishing failed for: ${content.title}`
+          : 'Publishing failed for one of your uploads.',
+      });
+    }
+  } catch (e) {
+    console.warn('[notify] failed to send failure notification:', e?.message || e);
   }
 }
 async function generateChecksum(localPath) {
@@ -171,6 +191,25 @@ const worker = new Worker('media', async (job) => {
         file_size_bytes: BigInt(fileInfo.size),
       },
     });
+
+    try {
+      const content = await prisma.content.findUnique({
+        where: { id: contentId },
+        select: { id: true, title: true, created_by_user_id: true },
+      });
+      if (content?.created_by_user_id) {
+        await sendNotification({
+          receiverId: content.created_by_user_id,
+          type: 'content.published',
+          entityId: content.id,
+          text: content.title
+            ? `Your content is now published: ${content.title}`
+            : 'Your content is now published.',
+        });
+      }
+    } catch (e) {
+      console.warn('[notify] failed to send published notification:', e?.message || e);
+    }
 
     console.log('[job] completed', { contentId });
   } catch (err) {

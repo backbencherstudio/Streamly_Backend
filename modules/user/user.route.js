@@ -16,6 +16,8 @@ import {
   updatePassword,
   resendForgotPasswordOTP,
   deleteUser,
+  getUserDevices,
+  removeUserDevice,
 } from "./user.controller.js";
 import { upload } from "../../config/Multer.config.js";
 import { verifyUser } from "../../middlewares/verifyUsers.js";
@@ -88,5 +90,8 @@ router.get("/get-me", authenticateUser, getMe);
 //update pass;
 router.put("/updatePass", authenticateUser, updatePassword);
 router.delete("/delete", authenticateUser, deleteUser);
+
+router.get("/device", authenticateUser, getUserDevices);
+router.delete("/device/:deviceId", authenticateUser, removeUserDevice);
 
 export default router;

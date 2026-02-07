@@ -182,10 +182,12 @@ export const registerUser = async (req, res) => {
     return res.status(500).json({ message: "Internal Server Error" });
   }
 };
-//login route
+
+// ======================= login route ========================
 export const loginUser = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, deviceToken, deviceOS, deviceType, deviceName } =
+      req.body;
 
     const missingField = ["email", "password"].find(
       (field) => !req.body[field],
@@ -221,21 +223,101 @@ export const loginUser = async (req, res) => {
       });
     }
 
-    if (user.type == "admin") {
-      return res.status(403).json({
-        message: "ADMIN YOU MUST LOG IN FROM ADMIN PANEL",
-      });
-    }
+    const isAdminUser =
+      String(user.role || "").toLowerCase() === "admin" ||
+      String(user.type || "").toLowerCase() === "admin";
 
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       return res.status(401).json({ message: "Invalid password" });
     }
 
+    if (!isAdminUser) {
+      // Enforce device limit only when user has an active subscription (viewer or creator)
+      const [activeViewerSub, activeCreatorSub] = await Promise.all([
+        prisma.subscription.findFirst({
+          where: { user_id: user.id, status: "active" },
+          select: { id: true },
+        }),
+        prisma.creatorSubscription.findFirst({
+          where: { user_id: user.id, status: "active" },
+          select: { id: true },
+        }),
+      ]);
+
+      const hasActiveSubscription = Boolean(
+        activeViewerSub || activeCreatorSub,
+      );
+      const maxDevices = 3;
+
+      if (hasActiveSubscription && !deviceToken) {
+        return res.status(400).json({
+          message: "deviceToken is required for subscribed users",
+          code: "DEVICE_TOKEN_REQUIRED",
+        });
+      }
+
+      if (deviceToken) {
+        const tokenValue = String(deviceToken).trim();
+
+        const existingToken = await prisma.deviceToken.findUnique({
+          where: { token: tokenValue },
+          select: { id: true, user_id: true },
+        });
+
+        // Prevent reusing the same device token across multiple users
+        // if (existingToken && existingToken.user_id !== user.id) {
+        //   return res.status(409).json({
+        //     message: "This device is already linked to another account",
+        //     code: "DEVICE_TOKEN_IN_USE",
+        //   });
+        // }
+
+        if (hasActiveSubscription) {
+          const userDeviceCount = await prisma.deviceToken.count({
+            where: { user_id: user.id },
+          });
+
+          const isKnownDevice = Boolean(existingToken);
+
+          if (!isKnownDevice && userDeviceCount >= maxDevices) {
+            return res.status(403).json({
+              message: `Device limit reached. Max ${maxDevices} devices per subscription.`,
+              code: "DEVICE_LIMIT_REACHED",
+              maxDevices,
+              currentDevices: userDeviceCount,
+            });
+          }
+        }
+
+        // Save or update device token (do NOT reassign to other users)
+        if (existingToken) {
+          await prisma.deviceToken.update({
+            where: { token: tokenValue },
+            data: {
+              device_os: deviceOS,
+              device_type: deviceType,
+              device_name: deviceName,
+            },
+          });
+        } else {
+          await prisma.deviceToken.create({
+            data: {
+              user_id: user.id,
+              token: tokenValue,
+              device_os: deviceOS,
+              device_type: deviceType,
+              device_name: deviceName,
+            },
+          });
+        }
+      }
+    }
+
     const token = jwt.sign(
       { userId: user.id, email: user.email, role: user.role, type: user.type },
       getJwtSecret(),
-      { expiresIn: "100d" },
+      { expiresIn: "30d" },
     );
 
     if (user.status === "deactivated") {
@@ -264,6 +346,7 @@ export const loginUser = async (req, res) => {
     });
   }
 };
+
 //---------------------forgot password--------------------
 // Forgot password OTP send
 export const forgotPasswordOTPsend = async (req, res) => {
@@ -1123,5 +1206,71 @@ export const deleteUser = async (req, res) => {
 
       .status(500)
       .json({ message: "Internal Server Error", error: error.message });
+  }
+};
+
+// device menagement routes
+export const getUserDevices = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(400).json({ message: "User not authenticated" });
+    }
+
+    const devices = await prisma.deviceToken.findMany({
+      where: { user_id: userId },
+      select: {
+        id: true,
+        token: true,
+        device_os: true,
+        device_type: true,
+        device_name: true,
+        created_at: true,
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "User devices retrieved successfully",
+      data: devices,
+    });
+  } catch (error) {
+    console.error("Error retrieving user devices:", error);
+    return res
+      .status(500)
+      .json({ message: "Internal Server Error", error: error.message });
+  }
+};
+
+export const removeUserDevice = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    const { deviceId } = req.params;
+    if (!userId) {
+      return res.status(400).json({ message: "User not authenticated" });
+    }
+
+    const device = await prisma.deviceToken.findUnique({
+      where: { id: deviceId },
+    });
+
+    if (!device || device.user_id !== userId) {
+      return res.status(404).json({ message: "Device not found" });
+    }
+
+    await prisma.deviceToken.delete({
+      where: { id: deviceId },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Device removed successfully",
+    });
+  } catch (error) {
+    console.error("Error removing user device:", error);
+    return res.status(500).json({
+      message: "Internal Server Error",
+      error: error.message,
+    });
   }
 };

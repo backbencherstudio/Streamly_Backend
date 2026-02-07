@@ -4,12 +4,16 @@ import {
   activateUser,
   deactivateAccount,
   deleteAccount,
+  emailChange,
+  myProfile,
 } from "./admin_settings.controller.js";
 import { verifyUser } from "../../../middlewares/verifyUsers.js";
 import { authenticateUser } from "../../user/user.controller.js";
 
 const router = express.Router();
 
+router.get("/profile", verifyUser("admin"), myProfile);
+router.patch("/change/email", verifyUser("admin"), emailChange);
 router.post("/deactivate", authenticateUser, deactivateAccount);
 router.post("/activate", activateUser);
 router.delete("/delete/:userId", verifyAdmin, verifyUser, deleteAccount);

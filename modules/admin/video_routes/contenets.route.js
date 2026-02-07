@@ -28,46 +28,51 @@ const buildLocalUrl = (file) => {
 // Route to get all contents (excluding soft-deleted)
 r.get("/allContents", verifyUser("admin"), async (req, res) => {
   try {
-    const rows = await prisma.content.findMany({
-      where: {
-        deleted_at: null,
-      },
-      orderBy: { created_at: "desc" },
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        genre: true,
-        category: {
-          select: {
-            id: true,
-            name: true,
+    const page = Math.max(parseInt(req.query.page || "1", 10), 1);
+    const takeRaw = parseInt(req.query.take || req.query.limit || "20", 10);
+    const take = Math.min(Math.max(takeRaw || 20, 1), 100);
+    const skip = (page - 1) * take;
+
+    const [rows, total] = await Promise.all([
+      prisma.content.findMany({
+        where: { deleted_at: null },
+        orderBy: { created_at: "desc" },
+        skip,
+        take,
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          genre: true,
+          category: {
+            select: { id: true, name: true },
+          },
+          content_type: true,
+          content_status: true,
+          quality: true,
+          is_premium: true,
+          file_size_bytes: true,
+          duration_seconds: true,
+          view_count: true,
+          created_at: true,
+          s3_bucket: true,
+          s3_key: true,
+          s3_thumb_key: true,
+          video: true,
+          thumbnail: true,
+          series_id: true,
+          season_number: true,
+          episode_number: true,
+          parent_series: {
+            select: { id: true, title: true },
           },
         },
-        content_type: true,
-        content_status: true,
-        quality: true,
-        is_premium: true,
-        file_size_bytes: true,
-        duration_seconds: true,
-        view_count: true,
-        created_at: true,
-        s3_bucket: true,
-        s3_key: true,
-        s3_thumb_key: true,
-        video: true,
-        thumbnail: true,
-        series_id: true,
-        season_number: true,
-        episode_number: true,
-        parent_series: {
-          select: {
-            id: true,
-            title: true,
-          },
-        },
-      },
-    });
+      }),
+
+      prisma.content.count({
+        where: { deleted_at: null },
+      }),
+    ]);
 
     const serializedRows = rows.map((row) => {
       const video =
@@ -88,12 +93,26 @@ r.get("/allContents", verifyUser("admin"), async (req, res) => {
       };
     });
 
-    res.json(serializedRows);
+    // ✅ Set headers BEFORE response
+    res.set("X-Total-Count", total);
+
+    res.json({
+      pagination: {
+        page,
+        take,
+        total,
+        totalPages: Math.ceil(total / take),
+        hasNext: page * take < total,
+        hasPrev: page > 1,
+      },
+      contents: serializedRows,
+    });
   } catch (error) {
-    console.log("Error fetching contents:", error);
+    console.error("Error fetching contents:", error);
     res.status(500).json({ error: "Failed to fetch contents" });
   }
 });
+
 
 r.get("/latestContents", async (req, res) => {
   try {

@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { sendEmail } from "../../utils/mailService.js";
 import { createAdminTicketNotificationEmail } from "../../constants/email_message.js";
+import { sendNotification, sendNotifications } from "../../utils/notificationService.js";
 
 const prisma = new PrismaClient();
 
@@ -23,6 +24,21 @@ export const createSupportTicket = async (req, res) => {
         description,
       },
     });
+
+    try {
+      const admins = await prisma.user.findMany({
+        where: { role: "admin", deleted_at: null },
+        select: { id: true },
+      });
+      await sendNotifications({
+        receiverIds: admins.map((a) => a.id),
+        type: "support.new_ticket",
+        entityId: newTicket.id,
+        text: `New support ticket: ${subject}`,
+      });
+    } catch (error) {
+      console.error("Error sending admin notification:", error);
+    }
 
     try {
       const adminEmail = process.env.ADMIN_EMAIL;
@@ -84,6 +100,15 @@ export const solveTicket = async (req, res) => {
         where: { id: ticketId },
         data: { status: "Open" },
       });
+
+      if (ticket.user_id) {
+        await sendNotification({
+          receiverId: ticket.user_id,
+          type: "support.ticket_reopened",
+          entityId: ticketId,
+          text: "Your support ticket has been reopened.",
+        });
+      }
       return res.status(200).json({
         success: true,
         message: "Ticket opened successfully",
@@ -95,6 +120,15 @@ export const solveTicket = async (req, res) => {
         where: { id: ticketId },
         data: { status: "Resolved" },
       });
+
+      if (ticket.user_id) {
+        await sendNotification({
+          receiverId: ticket.user_id,
+          type: "support.ticket_resolved",
+          entityId: ticketId,
+          text: "Your support ticket has been resolved.",
+        });
+      }
 
       return res.status(200).json({
         success: true,

@@ -123,6 +123,7 @@ model User {
   contentViews          ContentView[]
   downloads             Download[]
   storageQuota          UserStorageQuota?
+  deviceTokens          DeviceToken[]
 
   @@map("users")
 }
@@ -815,4 +816,21 @@ model UserStorageQuota {
   notification_threshold Int         @default(80) // Notify when % of storage used
 
   @@map("user_storage_quotas")
+}
+
+model DeviceToken {
+  id         String   @id @default(cuid())
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  user_id String
+  user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  device_name String? // e.g., "John's iPhone"
+  token       String  @unique
+  device_os   String? // e.g., "iOS", "Android"
+  device_type String? // e.g., "Phone", "Tablet"
+
+  @@index([user_id])
+  @@map("device_tokens")
 }

@@ -5,34 +5,21 @@ import fs from 'fs';
 import { randomUUID } from 'crypto';
 import { PrismaClient } from '@prisma/client';
 import { mediaQueue } from '../../libs/queue.js';
+import { verifyAdmin } from '../../../middlewares/verifyAdmin.js';
 
 const prisma = new PrismaClient();
 const router = express.Router();
 
-// Helper to extract enum values from schema
-const getEnumValuesFromSchema = (enumName) => {
-  try {
-    const schemaPath = path.resolve(process.cwd(), 'prisma', 'schema.prisma');
-    const schema = fs.readFileSync(schemaPath, 'utf-8');
-    
-    // Match enum block: enum EnumName { value1 value2 ... }
-    const enumRegex = new RegExp(`enum\\s+${enumName}\\s*\\{([^}]+)\\}`, 's');
-    const match = schema.match(enumRegex);
-    
-    if (match) {
-      // Extract values from enum block
-      const values = match[1]
-        .split('\n')
-        .map(line => line.trim())
-        .filter(line => line && !line.startsWith('//'))
-        .map(line => line.split('//')[0].trim()); // Remove comments
-      return values.filter(v => v);
-    }
-    return [];
-  } catch (err) {
-    console.warn(`Could not fetch enum values for ${enumName}:`, err);
-    return [];
+const slugToArray = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.map((v) => String(v).trim()).filter(Boolean);
+  if (typeof value === 'string') {
+    return value
+      .split(',')
+      .map((v) => v.trim())
+      .filter(Boolean);
   }
+  return [];
 };
 
 const uploadDir = path.resolve(process.cwd(), 'tmp_uploads');
@@ -51,80 +38,108 @@ const upload = multer({
   limits: { fileSize: 30 * 1024 * 1024 * 1024 },
 });
 
-//-----------------upload video and thumbnail-----------------
-router.post('/video', upload.fields([
-  { name: 'file', maxCount: 1 }, 
-  { name: 'thumbnail', maxCount: 1 },  
-]), async (req, res, next) => {
+const buildTypeDetails = ({ content_type, series_id, season_number, episode_number, trailer_for_id }) => {
+  if (content_type === 'episode') {
+    return {
+      episode: {
+        season_number,
+        episode_number,
+        series: series_id ? { id: series_id } : null,
+      },
+    };
+  }
+  if (content_type === 'trailer') {
+    return {
+      trailer: {
+        for: trailer_for_id ? { id: trailer_for_id } : null,
+      },
+    };
+  }
+  return {};
+};
+
+const createAdminUpload = async (req, res, next) => {
   try {
+    const adminUserId = req.user?.id;
+    if (!adminUserId) return res.status(401).json({ message: 'Unauthenticated' });
+
     if (!req.files || !req.files.file) {
       return res.status(400).json({ error: 'Video file is required' });
     }
 
-    const videoFile = req.files.file[0]; 
-    const thumbnailFile = req.files.thumbnail ? req.files.thumbnail[0] : null; 
+    const videoFile = req.files.file[0];
+    const thumbnailFile = req.files.thumbnail ? req.files.thumbnail[0] : null;
 
-    // Extract fields from request body
-    const { 
-      title, 
-      description, 
-      genre,           // Can be single genre or comma-separated list
-      category_id, 
-      content_type,    // movie | series | episode | trailer
-      quality,         // 4k | 1080p | 720p | 480p
-      is_premium,      // true | false
-      // Series/episode fields
-      series_id,       // For episodes: parent content ID
-      season_number,   // For episodes: season number
-      episode_number,  // For episodes: episode number
-      // Trailer fields
-      trailer_for_id,  // For trailers: content this trailer is for (movie, series, or episode)
-      release_date,    // ISO date string
+    const {
+      title,
+      description,
+      genre,
+      category_id,
+      content_type,
+      quality,
+      is_premium,
+      series_id,
+      season_number,
+      episode_number,
+      trailer_for_id,
+      release_date,
     } = req.body;
 
-    // Validation
-    if (!title) {
-      return res.status(400).json({ error: 'Title is required' });
-    }
-    if (!category_id) {
-      return res.status(400).json({ error: 'Category is required' });
-    }
+    if (!title) return res.status(400).json({ error: 'Title is required' });
+    if (!category_id) return res.status(400).json({ error: 'Category is required' });
 
     const contentTypeValue = content_type || 'movie';
 
-    // Validate episode requirements
     if (contentTypeValue === 'episode') {
       if (!series_id) {
         return res.status(400).json({ error: 'series_id is required for episodes' });
       }
       if (!season_number || !episode_number) {
-        return res.status(400).json({ error: 'season_number and episode_number are required for episodes' });
+        return res.status(400).json({
+          error: 'season_number and episode_number are required for episodes',
+        });
+      }
+
+      const series = await prisma.content.findFirst({
+        where: {
+          id: String(series_id),
+          deleted_at: null,
+          content_type: 'series',
+        },
+        select: { id: true },
+      });
+      if (!series) {
+        return res.status(400).json({
+          error: 'series_id does not reference a valid series',
+          code: 'SERIES_NOT_FOUND',
+        });
       }
     }
 
-    // Validate trailer requirements
     if (contentTypeValue === 'trailer') {
-      if (!trailer_for_id) {
-        return res.status(400).json({ error: 'trailer_for_id is required for trailers (content ID of movie/series/episode this trailer is for)' });
+      if (trailer_for_id) {
+        const referencedContent = await prisma.content.findFirst({
+          where: {
+            id: String(trailer_for_id),
+            deleted_at: null,
+          },
+          select: { id: true },
+        });
+        if (!referencedContent) {
+          return res.status(400).json({
+            error: 'trailer_for_id does not reference a valid content',
+          });
+        }
       }
     }
 
-    // Parse genre (convert comma-separated string to array, or single genre to array)
-    let genreArray = [];
-    if (genre) {
-      if (typeof genre === 'string') {
-        genreArray = genre.split(',').map(g => g.trim());
-      } else if (Array.isArray(genre)) {
-        genreArray = genre.map(g => String(g).trim());
-      }
-    }
+    const genreArray = slugToArray(genre);
 
-    // Create content record
     const content = await prisma.content.create({
       data: {
         title,
         description: description ?? null,
-        genre: genreArray.length > 0 ? genreArray : [],
+        genre: genreArray.length ? genreArray : [],
         category_id,
         content_type: contentTypeValue,
         mime_type: videoFile.mimetype,
@@ -132,83 +147,86 @@ router.post('/video', upload.fields([
         is_premium: is_premium === 'true' || is_premium === true,
         original_name: videoFile.originalname,
         file_size_bytes: BigInt(videoFile.size),
-        storage_provider: 'local', 
+        storage_provider: 'local',
         content_status: 'uploading_local',
         thumbnail: thumbnailFile ? thumbnailFile.filename : null,
-        // Series/episode fields
         series_id: series_id ?? null,
         season_number: season_number ? parseInt(season_number) : null,
         episode_number: episode_number ? parseInt(episode_number) : null,
-        // Trailer field
         trailer_for_id: trailer_for_id ?? null,
         release_date: release_date ? new Date(release_date) : null,
+
+        created_by_user_id: adminUserId,
+        // review_status defaults to approved in schema
       },
-    }).catch((err) => {
-      // Handle Prisma validation errors (invalid enums, etc.)
-      if (err.message.includes('Invalid enum value') || err.message.includes('Invalid value for argument')) {
-        let errorMsg = 'Invalid enum value: ';
-        
-        if (err.message.includes('genre')) {
-          const genraValues = getEnumValuesFromSchema('Genra');
-          errorMsg += `genre must be one of: [${genraValues.join(', ')}]`;
-        } else if (err.message.includes('content_type')) {
-          const contentTypeValues = getEnumValuesFromSchema('ContentType');
-          errorMsg += `content_type must be one of: [${contentTypeValues.join(', ')}]`;
-        } else if (err.message.includes('content_status')) {
-          const contentStatusValues = getEnumValuesFromSchema('Content_status');
-          errorMsg += `content_status must be one of: [${contentStatusValues.join(', ')}]`;
-        } else {
-          errorMsg += err.message;
-        }
-        
-        throw { status: 400, message: errorMsg };
-      }
-      if (err.code === 'P2025') {
-        throw { status: 404, message: 'Category not found' };
-      }
-      throw err;
     });
 
-    const videoUrl = `/uploads/videos/${videoFile.filename}`;
-    const thumbnailUrl = thumbnailFile ? `/uploads/thumbnails/${thumbnailFile.filename}` : null;
-
-    res.json({
+    const created = {
       id: content.id,
-      status: content.content_status,
-      content_type: content.content_type,
-      title: content.title,
-      genre: content.genre,
-      videoUrl,
-      thumbnailUrl,
+      basic: {
+        title: content.title,
+        description: content.description,
+        content_type: content.content_type,
+        quality: content.quality,
+        release_date: content.release_date,
+        is_premium: content.is_premium,
+        category_id: content.category_id,
+      },
+      status: {
+        content_status: content.content_status,
+        review_status: content.review_status,
+      },
+      ...buildTypeDetails({
+        content_type: content.content_type,
+        series_id: content.series_id,
+        season_number: content.season_number,
+        episode_number: content.episode_number,
+        trailer_for_id: content.trailer_for_id,
+      }),
+      timestamps: {
+        created_at: content.created_at,
+        updated_at: content.updated_at,
+      },
+    };
+
+    res.status(201).json({
+      success: true,
       message: 'Upload initiated. Processing in background.',
+      content: created,
     });
 
-    // Queue for S3 upload and processing
-    await mediaQueue.add('push-to-s3', {
-      contentId: content.id,
-      localPath: videoFile.path,
-      thumbnailPath: thumbnailFile ? thumbnailFile.path : null,
-    }, {
-      attempts: 5,
-      backoff: { type: 'exponential', delay: 30_000 },
-      removeOnComplete: true,
-      removeOnFail: false,
-    });
-
+    await mediaQueue.add(
+      'push-to-s3',
+      {
+        contentId: content.id,
+        localPath: videoFile.path,
+        thumbnailPath: thumbnailFile ? thumbnailFile.path : null,
+      },
+      {
+        attempts: 5,
+        backoff: { type: 'exponential', delay: 30_000 },
+        removeOnComplete: true,
+        removeOnFail: false,
+      },
+    );
   } catch (err) {
-    if (err.status) {
-      return res.status(err.status).json({ error: err.message });
-    }
     next(err);
-    console.error('Error uploading video and thumbnail:', err);
   }
-});
+};
 
-const app = express();
-app.use('/uploads', express.static(path.resolve(process.cwd(), 'tmp_uploads')));
+//-----------------upload video and thumbnail-----------------
+router.post(
+  '/video',
+  verifyAdmin,
+  upload.fields([
+    { name: 'file', maxCount: 1 },
+    { name: 'thumbnail', maxCount: 1 },
+  ]),
+  createAdminUpload,
+);
 
 //-----------------Get upload status-----------------
-router.get('/status/:id', async (req, res, next) => {
+router.get('/status/:id', verifyAdmin, async (req, res, next) => {
   try {
     const { id } = req.params;
     

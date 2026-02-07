@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { sendNotification } from "../../../utils/notificationService.js";
 
 const prisma = new PrismaClient();
 
@@ -40,8 +41,19 @@ const channelSelect = {
   created_at: true,
   updated_at: true,
   deleted_at: true,
-  user: { select: { id: true, name: true, email: true, role: true } },
-  reviewed_by: { select: { id: true, name: true, email: true } },
+  user: {
+    select: {
+      id: true,
+      name: true,
+      avatar: true,
+      email: true,
+      role: true,
+    },
+  },
+
+  reviewed_by: {
+    select: { id: true, name: true, email: true, avatar: true, role: true },
+  },
   _count: { select: { contents: true } },
 };
 
@@ -49,6 +61,7 @@ export const listCreatorChannels = async (req, res) => {
   try {
     const { page, take, skip } = parsePageTake(req);
     const statusFilter = normalizeStatusFilter(req.query.status);
+
     if (statusFilter?.error) {
       return res.status(400).json({
         message: "Invalid status filter",
@@ -76,20 +89,34 @@ export const listCreatorChannels = async (req, res) => {
 
     const countsWhere = { deleted_at: null };
 
-    const [filteredTotal, all, pending, approved, rejected, channels] = await Promise.all([
-      prisma.creatorChannel.count({ where }),
-      prisma.creatorChannel.count({ where: countsWhere }),
-      prisma.creatorChannel.count({ where: { ...countsWhere, status: "pending" } }),
-      prisma.creatorChannel.count({ where: { ...countsWhere, status: "approved" } }),
-      prisma.creatorChannel.count({ where: { ...countsWhere, status: "rejected" } }),
-      prisma.creatorChannel.findMany({
-        where,
-        orderBy: { created_at: "desc" },
-        skip,
-        take,
-        select: channelSelect,
-      }),
-    ]);
+    const [filteredTotal, all, pending, approved, rejected, channels] =
+      await Promise.all([
+        prisma.creatorChannel.count({ where }),
+        prisma.creatorChannel.count({ where: countsWhere }),
+        prisma.creatorChannel.count({
+          where: { ...countsWhere, status: "pending" },
+        }),
+        prisma.creatorChannel.count({
+          where: { ...countsWhere, status: "approved" },
+        }),
+        prisma.creatorChannel.count({
+          where: { ...countsWhere, status: "rejected" },
+        }),
+        prisma.creatorChannel.findMany({
+          where,
+          orderBy: { created_at: "desc" },
+          skip,
+          take,
+          select: channelSelect,
+        }),
+      ]);
+
+    const creatorSubscriptions = await prisma.creatorSubscription.findMany({
+      where: {
+        user_id: { in: channels.map((c) => c.user_id) },
+        status: "active",
+      },
+    });
 
     return res.json({
       success: true,
@@ -101,6 +128,7 @@ export const listCreatorChannels = async (req, res) => {
         totalPages: Math.ceil(filteredTotal / take),
       },
       channels,
+      creatorSubscriptions,
     });
   } catch (err) {
     console.error("listCreatorChannels error:", err);
@@ -220,6 +248,15 @@ export const approveCreatorChannel = async (req, res) => {
       return c;
     });
 
+    await sendNotification({
+      receiverId: channel.user_id,
+      type: "creator_channel.approved",
+      entityId: updated.id,
+      text: noteValue
+        ? `Your creator channel was approved. Note: ${noteValue}`
+        : "Your creator channel was approved.",
+    });
+
     return res.json({
       success: true,
       message: "Channel approved",
@@ -268,6 +305,15 @@ export const rejectCreatorChannel = async (req, res) => {
         reviewed_at: new Date(),
         review_note: noteValue,
       },
+    });
+
+    await sendNotification({
+      receiverId: channel.user_id,
+      type: "creator_channel.rejected",
+      entityId: updated.id,
+      text: noteValue
+        ? `Your creator channel was rejected. Note: ${noteValue}`
+        : "Your creator channel was rejected.",
     });
 
     return res.json({
