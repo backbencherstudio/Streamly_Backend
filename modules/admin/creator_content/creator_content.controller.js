@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { sendNotification } from "../../../utils/notificationService.js";
 
 const prisma = new PrismaClient();
 
@@ -473,6 +474,7 @@ export const approveCreatorContent = async (req, res) => {
         id: true,
         deleted_at: true,
         creator_channel_id: true,
+        created_by_user_id: true,
         review_status: true,
       },
     });
@@ -503,6 +505,17 @@ export const approveCreatorContent = async (req, res) => {
         review_note: noteValue,
       },
     });
+
+    if (row.created_by_user_id) {
+      await sendNotification({
+        receiverId: row.created_by_user_id,
+        type: "creator_content.approved",
+        entityId: updated.id,
+        text: noteValue
+          ? `Your content was approved. Note: ${noteValue}`
+          : "Your content was approved.",
+      });
+    }
 
     return res.json({
       success: true,
@@ -537,6 +550,7 @@ export const rejectCreatorContent = async (req, res) => {
         id: true,
         deleted_at: true,
         creator_channel_id: true,
+        created_by_user_id: true,
         review_status: true,
       },
     });
@@ -565,6 +579,17 @@ export const rejectCreatorContent = async (req, res) => {
         review_note: noteValue,
       },
     });
+
+    if (row.created_by_user_id) {
+      await sendNotification({
+        receiverId: row.created_by_user_id,
+        type: "creator_content.rejected",
+        entityId: updated.id,
+        text: noteValue
+          ? `Your content was rejected. Note: ${noteValue}`
+          : "Your content was rejected.",
+      });
+    }
 
     return res.json({
       success: true,

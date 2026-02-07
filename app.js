@@ -23,6 +23,7 @@ import creatorChannelRoutes from "./modules/creator/creator_channel.route.js";
 import creatorUploadRoutes from "./modules/creator/uploads/creator_upload.route.js";
 import adminCreatorChannelRoutes from "./modules/admin/creator_channels/creator_channels.route.js";
 import adminCreatorContentRoutes from "./modules/admin/creator_content/creator_content.route.js";
+import dashboard from "./modules/admin/dashboard/dashboard.route.js";
 import { swaggerSpec } from "./swagger/index.js";
 import swaggerUi from "swagger-ui-express";
 import { sendEmail } from "./utils/mailService.js";
@@ -30,15 +31,15 @@ import { emailUnsuspendUser } from "./constants/email_message.js";
 import dotenv from "dotenv";
 import { setSocketServer } from "./utils/notificationService.js";
 import session from "express-session";
-import passport from "./config/passport.js"; 
-import http from 'http';  
+import passport from "./config/passport.js";
+import http from "http";
 dotenv.config();
 
 const app = express();
 const server = http.createServer(app);
 const prisma = new PrismaClient();
 app.set("json replacer", (key, value) =>
-  typeof value === "bigint" ? value.toString() : value
+  typeof value === "bigint" ? value.toString() : value,
 );
 BigInt.prototype.toJSON = function () {
   return this.toString();
@@ -64,7 +65,7 @@ app.use(
       "http://localhost:5173",
       "http://192.168.4.42:3000",
       "http://localhost:3000",
-       "http://localhost:3000/auth",
+      "http://localhost:3000/auth",
       "http://192.168.4.42:3000/auth",
       "https://accounts.google.com/o/oauth2/v2/auth",
       "http://localhost:8080",
@@ -72,27 +73,26 @@ app.use(
       "https://f7acfea4e102.ngrok-free.app",
       "https://decisions-spanish-protecting-anime.trycloudflare.com/api/users/auth/google/callback",
       "https://decisions-spanish-protecting-anime.trycloudflare.com",
-      "https://susdent-dashboard-f11o.vercel.app"
+      "https://susdent-dashboard-f11o.vercel.app",
     ],
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
     // allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", ],
     credentials: true,
     preflightContinue: true,
     optionsSuccessStatus: 204,
-  })
+  }),
 );
-// Session middleware 
+// Session middleware
 app.use(
   session({
     secret: process.env.SESSION_SECRET || "your_secret_key",
     resave: false,
     saveUninitialized: false,
     cookie: { secure: process.env.NODE_ENV === "production" },
-  })
+  }),
 );
 app.use(passport.initialize());
 app.use(passport.session());
-
 
 //--------------Cron job for subscription cleanup-------------------
 let counter = 0;
@@ -100,7 +100,7 @@ nodeCron.schedule("0 0 * * *", async () => {
   try {
     const now = new Date();
     console.log(
-      `Daily cron job running at: ${now.toISOString()} - Counter: ${counter++}`
+      `Daily cron job running at: ${now.toISOString()} - Counter: ${counter++}`,
     );
     const batchSize = 1000;
     const subscriptionsToUpdate = await prisma.subscription.findMany({
@@ -137,7 +137,7 @@ nodeCron.schedule("0 0 * * *", async () => {
     ]);
 
     console.log(
-      `Updated ${subscriptionsToUpdate.length} subscriptions and ${userIds.length} users.`
+      `Updated ${subscriptionsToUpdate.length} subscriptions and ${userIds.length} users.`,
     );
   } catch (error) {
     console.error("Error in daily subscription cleanup:", error);
@@ -150,7 +150,7 @@ nodeCron.schedule("0 0 * * *", async () => {
   try {
     const now = new Date();
     console.log(
-      `Checking for suspended users to unsuspend at: ${now.toISOString()}`
+      `Checking for suspended users to unsuspend at: ${now.toISOString()}`,
     );
 
     const usersToUpdate = await prisma.user.findMany({
@@ -175,7 +175,7 @@ nodeCron.schedule("0 0 * * *", async () => {
         await sendEmail(
           user.email,
           "Your Account Has Been Reactivated",
-          emailContent
+          emailContent,
         );
         console.log(`Email sent to ${user.email}`);
       }
@@ -219,7 +219,7 @@ nodeCron.schedule("0 0 * * *", async () => {
         await sendEmail(
           user.email,
           "Your Account Has Been Reactivated",
-          emailContent
+          emailContent,
         );
         console.log(`Email sent to ${user.email}`);
       }
@@ -261,6 +261,7 @@ app.use("/api/favourites", favouriteRoutes);
 app.use("/api/downloads", downloadRoutes);
 app.use("/api/storage", downloadRoutes);
 app.use("/api/support", supportRoutes);
+app.use("/api/admin", dashboard);
 
 // Creator flow
 app.use("/api/creator", creatorChannelRoutes);

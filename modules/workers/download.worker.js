@@ -8,6 +8,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { Readable } from 'stream';
+import { sendNotification } from '../../utils/notificationService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -179,6 +180,19 @@ const downloadWorker = new Worker(
       });
 
       console.log(`[Download Worker] Download ${downloadId} completed successfully at ${localFilePath}`);
+
+      try {
+        await sendNotification({
+          receiverId: userId,
+          type: 'download.completed',
+          entityId: downloadId,
+          text: download?.content?.title
+            ? `Download completed: ${download.content.title}`
+            : 'Your download has completed.',
+        });
+      } catch (e) {
+        console.warn('[notify] failed to send download completed notification:', e?.message || e);
+      }
       
       return {
         success: true,
@@ -202,6 +216,17 @@ const downloadWorker = new Worker(
             },
           },
         });
+
+        try {
+          await sendNotification({
+            receiverId: userId,
+            type: 'download.failed',
+            entityId: downloadId,
+            text: 'Your download failed. Please try again.',
+          });
+        } catch (e) {
+          console.warn('[notify] failed to send download failed notification:', e?.message || e);
+        }
       } catch (updateError) {
         console.error(`[Download Worker] Failed to update download status:`, updateError);
       }

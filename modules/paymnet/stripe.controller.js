@@ -1,3 +1,4 @@
+import { sendNotification } from "../../utils/notificationService.js";
 import Stripe from "stripe";
 import { PrismaClient } from "@prisma/client";
 
@@ -12,6 +13,38 @@ const PLAN_QUOTA_BYTES = {
   most_popular: 50n * QUOTA_GB,
   family: 100n * QUOTA_GB,
 };
+
+const SUBSCRIPTION_STATUS_VALUES = [
+  "active",
+  "inactive",
+  "suspended",
+  "expired",
+  "deactivated",
+];
+const VIEWER_PLAN_VALUES = ["most_popular", "basic", "family", "No_plan"];
+const CREATOR_PLAN_VALUES = ["basic", "family", "most_popular"];
+const PAYMENT_METHOD_VALUES = ["No_pay", "credit_card", "stripe", "paypal"];
+
+function parseCsv(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value.map((v) => String(v).trim()).filter(Boolean);
+  }
+  return String(value)
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean);
+}
+
+function filterAllowed(values, allowed) {
+  const allowedSet = new Set(allowed);
+  return (values || []).filter((v) => allowedSet.has(v));
+}
+
+function toBool(value, defaultValue = false) {
+  if (value === undefined || value === null) return defaultValue;
+  return String(value).toLowerCase() === "true";
+}
 
 function normalizePlan(value) {
   if (!value) return null;
@@ -32,6 +65,205 @@ function normalizeKind(value) {
   if (k === "viewer" || k === "creator") return k;
   return null;
 }
+
+function startOfMonth(date) {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
+}
+
+function startOfPreviousMonth(date) {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() - 1, 1));
+}
+
+function safePercentChange(current, previous) {
+  const c = Number(current || 0);
+  const p = Number(previous || 0);
+  if (p <= 0) return null;
+  return ((c - p) / p) * 100;
+}
+
+function toNumberOrNull(v) {
+  if (v === undefined || v === null) return null;
+  const n = typeof v === "bigint" ? Number(v) : Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function pickMoneySum(agg) {
+  const paid = toNumberOrNull(agg?._sum?.paid_amount);
+  const price = toNumberOrNull(agg?._sum?.price);
+  return paid ?? price ?? 0;
+}
+
+export const getSubscriptionDashboardStats = async (req, res) => {
+  try {
+    const now = new Date();
+    const thisMonthStart = startOfMonth(now);
+    const prevMonthStart = startOfPreviousMonth(now);
+
+    /* ---------------- ALL TIME SUBSCRIBERS ---------------- */
+
+    const [
+      viewerUsers,
+      creatorUsers,
+      activeViewerCount,
+      activeCreatorCount,
+      viewerPopularPlan,
+      creatorPopularPlan,
+    ] = await Promise.all([
+      prisma.subscription.findMany({
+        distinct: ["user_id"],
+        where: { user_id: { not: null } },
+        select: { user_id: true },
+      }),
+
+      prisma.creatorSubscription.findMany({
+        distinct: ["user_id"],
+        select: { user_id: true },
+      }),
+
+      prisma.subscription.count({
+        where: { status: "active" },
+      }),
+
+      prisma.creatorSubscription.count({
+        where: { status: "active" },
+      }),
+
+      prisma.subscription.groupBy({
+        by: ["plan"],
+        where: { status: "active" },
+        _count: { plan: true },
+        orderBy: { _count: { plan: "desc" } },
+        take: 1,
+      }),
+
+      prisma.creatorSubscription.groupBy({
+        by: ["plan"],
+        where: { status: "active" },
+        _count: { plan: true },
+        orderBy: { _count: { plan: "desc" } },
+        take: 1,
+      }),
+    ]);
+
+    const totalViewer = viewerUsers.length;
+    const totalCreator = creatorUsers.length;
+    const totalSubscribers = totalViewer + totalCreator;
+
+    const activeSubscriptions = activeViewerCount + activeCreatorCount;
+
+    const retentionPercent =
+      totalSubscribers > 0
+        ? (activeSubscriptions / totalSubscribers) * 100
+        : null;
+
+    /* ---------------- MONTHLY REVENUE ONLY ---------------- */
+
+    const [revThisAgg, revPrevAgg, txThisCount, currencyRow] =
+      await Promise.all([
+        prisma.paymentTransaction.aggregate({
+          where: {
+            status: "succeeded",
+            created_at: { gte: thisMonthStart },
+          },
+          _sum: { paid_amount: true, price: true },
+        }),
+
+        prisma.paymentTransaction.aggregate({
+          where: {
+            status: "succeeded",
+            created_at: { gte: prevMonthStart, lt: thisMonthStart },
+          },
+          _sum: { paid_amount: true, price: true },
+        }),
+
+        prisma.paymentTransaction.count({
+          where: {
+            status: "succeeded",
+            created_at: { gte: thisMonthStart },
+          },
+        }),
+
+        prisma.paymentTransaction.findFirst({
+          where: {
+            status: "succeeded",
+            created_at: { gte: thisMonthStart },
+          },
+          orderBy: { created_at: "desc" },
+          select: { paid_currency: true, currency: true },
+        }),
+      ]);
+
+    const revenueThisMonth = pickMoneySum(revThisAgg);
+    const revenuePrevMonth = pickMoneySum(revPrevAgg);
+
+    const revenueGrowthPercent = safePercentChange(
+      revenueThisMonth,
+      revenuePrevMonth,
+    );
+
+    const currency = (
+      currencyRow?.paid_currency ||
+      currencyRow?.currency ||
+      "usd"
+    ).toLowerCase();
+
+    const avgSubscriptionValue =
+      activeSubscriptions > 0 ? revenueThisMonth / activeSubscriptions : 0;
+
+    /* ---------------- RESPONSE ---------------- */
+
+    return res.json({
+      success: true,
+      timeframe: {
+        monthStart: thisMonthStart,
+        previousMonthStart: prevMonthStart,
+      },
+      cards: {
+        total_subscribers: {
+          value: totalSubscribers,
+          breakdown: {
+            viewer: totalViewer,
+            creator: totalCreator,
+          },
+        },
+
+        active_subscriptions: {
+          value: activeSubscriptions,
+          retention_percent: retentionPercent,
+        },
+
+        monthly_revenue: {
+          value: revenueThisMonth,
+          growth_percent: revenueGrowthPercent,
+          currency,
+        },
+
+        avg_subscription_value: {
+          value: avgSubscriptionValue,
+          currency,
+          based_on_transactions: txThisCount,
+          most_popular_plan: {
+            viewer: viewerPopularPlan?.[0]
+              ? {
+                  plan: viewerPopularPlan[0].plan,
+                  count: viewerPopularPlan[0]._count.plan,
+                }
+              : null,
+            creator: creatorPopularPlan?.[0]
+              ? {
+                  plan: creatorPopularPlan[0].plan,
+                  count: creatorPopularPlan[0]._count.plan,
+                }
+              : null,
+          },
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Dashboard stats error:", error);
+    return res.status(500).json({ error: "Failed to fetch dashboard stats" });
+  }
+};
 
 async function upsertQuotaForPlanTx(tx, userId, planValue) {
   const plan = normalizePlan(planValue);
@@ -60,143 +292,376 @@ async function deleteQuotaTx(tx, userId) {
 
 export const getAllSubscriptions = async (req, res) => {
   try {
-    const subscriptions = await prisma.subscription.findMany({
-      orderBy: { created_at: "desc" },
-      select: {
-        id: true,
-        start_date: true,
-        end_date: true,
-        plan: true,
-        payment_method: true,
-        status: true,
-        transaction_id: true,
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
+    const kindParam = req.query?.kind
+      ? String(req.query.kind).toLowerCase()
+      : "all";
+    const kindNormalized = normalizeKind(kindParam);
+    const kind = kindParam === "all" ? "all" : kindNormalized || "all";
 
-        Services: {
-          select: {
-            plan: true,
-            name: true,
-            price: true,
-          },
-        },
-      },
+    const includePayments = toBool(req.query?.includePayments, false);
+    const includeDeleted = toBool(req.query?.includeDeleted, false);
+
+    const page = Math.max(parseInt(req.query?.page || "1", 10) || 1, 1);
+    const limitRaw = parseInt(req.query?.limit || "20", 10) || 20;
+    const limit = Math.min(Math.max(limitRaw, 1), 100);
+    const skip = (page - 1) * limit;
+
+    const q = req.query?.q ? String(req.query.q).trim() : "";
+    const userId = req.query?.user_id ? String(req.query.user_id).trim() : "";
+
+    const statusFilter = filterAllowed(
+      parseCsv(req.query?.status),
+      SUBSCRIPTION_STATUS_VALUES,
+    );
+    const paymentMethodFilter = filterAllowed(
+      parseCsv(req.query?.payment_method),
+      PAYMENT_METHOD_VALUES,
+    );
+
+    const planRaw = parseCsv(req.query?.plan);
+    const viewerPlanFilter = filterAllowed(planRaw, VIEWER_PLAN_VALUES);
+    const creatorPlanFilter = filterAllowed(planRaw, CREATOR_PLAN_VALUES);
+
+    const includeViewer = kind === "all" || kind === "viewer";
+    const includeCreator = kind === "all" || kind === "creator";
+
+    const takeEach = skip + limit;
+
+    const viewerWhere = {
+      ...(statusFilter.length ? { status: { in: statusFilter } } : {}),
+      ...(viewerPlanFilter.length ? { plan: { in: viewerPlanFilter } } : {}),
+      ...(paymentMethodFilter.length
+        ? { payment_method: { in: paymentMethodFilter } }
+        : {}),
+      ...(userId ? { user_id: userId } : {}),
+      ...(q
+        ? {
+            user: {
+              OR: [
+                { name: { contains: q, mode: "insensitive" } },
+                { email: { contains: q, mode: "insensitive" } },
+              ],
+            },
+          }
+        : {}),
+    };
+
+    const creatorWhere = {
+      ...(includeDeleted ? {} : { deleted_at: null }),
+      ...(statusFilter.length ? { status: { in: statusFilter } } : {}),
+      ...(creatorPlanFilter.length ? { plan: { in: creatorPlanFilter } } : {}),
+      ...(paymentMethodFilter.length
+        ? { payment_method: { in: paymentMethodFilter } }
+        : {}),
+      ...(userId ? { user_id: userId } : {}),
+      ...(q
+        ? {
+            user: {
+              OR: [
+                { name: { contains: q, mode: "insensitive" } },
+                { email: { contains: q, mode: "insensitive" } },
+              ],
+            },
+          }
+        : {}),
+    };
+
+    const [viewerTotal, creatorTotal, viewerRows, creatorRows] =
+      await Promise.all([
+        includeViewer ? prisma.subscription.count({ where: viewerWhere }) : 0,
+        includeCreator
+          ? prisma.creatorSubscription.count({ where: creatorWhere })
+          : 0,
+        includeViewer
+          ? prisma.subscription.findMany({
+              where: viewerWhere,
+              orderBy: { created_at: "desc" },
+              take: takeEach,
+              select: {
+                id: true,
+                created_at: true,
+                start_date: true,
+                end_date: true,
+                renewal_date: true,
+                plan: true,
+                payment_method: true,
+                status: true,
+                transaction_id: true,
+                price: true,
+                user_id: true,
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    status: true,
+                    role: true,
+                    deleted_at: true,
+                  },
+                },
+                Services: {
+                  take: 1,
+                  select: {
+                    id: true,
+                    plan: true,
+                    name: true,
+                    price: true,
+                  },
+                },
+                PaymentTransaction: includePayments
+                  ? {
+                      orderBy: { created_at: "desc" },
+                      take: 1,
+                      select: {
+                        id: true,
+                        status: true,
+                        provider: true,
+                        price: true,
+                        currency: true,
+                        paid_amount: true,
+                        paid_currency: true,
+                        created_at: true,
+                      },
+                    }
+                  : false,
+              },
+            })
+          : [],
+        includeCreator
+          ? prisma.creatorSubscription.findMany({
+              where: creatorWhere,
+              orderBy: { created_at: "desc" },
+              take: takeEach,
+              select: {
+                id: true,
+                created_at: true,
+                deleted_at: true,
+                start_date: true,
+                end_date: true,
+                renewal_date: true,
+                plan: true,
+                payment_method: true,
+                status: true,
+                transaction_id: true,
+                user_id: true,
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    status: true,
+                    role: true,
+                    deleted_at: true,
+                  },
+                },
+                service: {
+                  select: {
+                    id: true,
+                    name: true,
+                    plan: true,
+                    price: true,
+                    currency: true,
+                    videos_per_month: true,
+                  },
+                },
+                PaymentTransaction: includePayments
+                  ? {
+                      orderBy: { created_at: "desc" },
+                      take: 1,
+                      select: {
+                        id: true,
+                        status: true,
+                        provider: true,
+                        price: true,
+                        currency: true,
+                        paid_amount: true,
+                        paid_currency: true,
+                        created_at: true,
+                      },
+                    }
+                  : false,
+              },
+            })
+          : [],
+      ]);
+
+    const viewerSubs = (viewerRows || []).map((s) => ({
+      kind: "viewer",
+      id: s.id,
+      status: s.status,
+      plan: s.plan,
+      payment_method: s.payment_method,
+      transaction_id: s.transaction_id,
+      price: s.price ?? null,
+      created_at: s.created_at,
+      start_date: s.start_date,
+      end_date: s.end_date,
+      renewal_date: s.renewal_date,
+      deleted_at: null,
+      user: s.user
+        ? {
+            id: s.user.id,
+            name: s.user.name,
+            email: s.user.email,
+            status: s.user.status,
+            role: s.user.role,
+            deleted_at: s.user.deleted_at,
+          }
+        : s.user_id
+          ? { id: s.user_id }
+          : null,
+      service: s.Services?.[0]
+        ? {
+            id: s.Services[0].id,
+            name: s.Services[0].name,
+            plan: s.Services[0].plan,
+            price: s.Services[0].price,
+          }
+        : null,
+      last_payment: includePayments
+        ? s.PaymentTransaction?.[0] || null
+        : undefined,
+    }));
+
+    const creatorSubs = (creatorRows || []).map((s) => ({
+      kind: "creator",
+      id: s.id,
+      status: s.status,
+      plan: s.plan,
+      payment_method: s.payment_method,
+      transaction_id: s.transaction_id,
+      price: null,
+      created_at: s.created_at,
+      start_date: s.start_date,
+      end_date: s.end_date,
+      renewal_date: s.renewal_date,
+      deleted_at: s.deleted_at,
+      user: s.user
+        ? {
+            id: s.user.id,
+            name: s.user.name,
+            email: s.user.email,
+            status: s.user.status,
+            role: s.user.role,
+            deleted_at: s.user.deleted_at,
+          }
+        : s.user_id
+          ? { id: s.user_id }
+          : null,
+      service: s.service
+        ? {
+            id: s.service.id,
+            name: s.service.name,
+            plan: s.service.plan,
+            price: s.service.price,
+            currency: s.service.currency || "usd",
+            videos_per_month: s.service.videos_per_month,
+          }
+        : null,
+      last_payment: includePayments
+        ? s.PaymentTransaction?.[0] || null
+        : undefined,
+    }));
+
+    const merged = [...viewerSubs, ...creatorSubs].sort((a, b) => {
+      const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return tb - ta;
     });
 
-    if (subscriptions.length === 0) {
-      return res.status(201).json({ message: "No subscriptions found" });
-    }
+    const subscriptions = merged.slice(skip, skip + limit);
+    const total = viewerTotal + creatorTotal;
 
-    res.json(subscriptions);
+    return res.json({
+      success: true,
+      kind,
+      filters: {
+        q: q || null,
+        user_id: userId || null,
+        status: statusFilter.length ? statusFilter : null,
+        plan: planRaw.length ? planRaw : null,
+        payment_method: paymentMethodFilter.length ? paymentMethodFilter : null,
+        includeDeleted,
+        includePayments,
+      },
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+      totals: {
+        viewer: viewerTotal,
+        creator: creatorTotal,
+        all: total,
+      },
+      subscriptions,
+    });
   } catch (error) {
     console.error("Error fetching subscriptions:", error);
     res.status(500).json({ error: "Failed to fetch subscriptions" });
   }
 };
 
-
-//Total Subscribers
-export const getTotalSubscribers = async (req, res) => {
+export const getSubscriptionById = async (req, res) => {
   try {
-    const totalSubscribers = await prisma.subscription.findMany({
-      distinct: ["user_id"],
-      select: {
-        user_id: true,
-      },
-    });
+    const { id } = req.params;
 
-    res.json({ totalSubscribers: totalSubscribers.length });
-  } catch (error) {
-    console.error("Error fetching total subscribers:", error);
-    res.status(500).json({ error: "Failed to fetch total subscribers" });
-  }
-};
-
-
-//Total Active Subscriptions
-export const getTotalActiveSubscriptions = async (req, res) => {
-  try {
-    const totalActiveSubscriptions = await prisma.subscription.count({
-      where: { status: "active" },
-    });
-
-    if (totalActiveSubscriptions === 0) {
-      return res.status(201).json({ message: "0" });
+    if (!id) {
+      return res.status(400).json({ error: "Subscription ID is required" });
     }
-    res.json({ totalActiveSubscriptions });
-  } catch (error) {
-    console.error("Error fetching total active subscriptions:", error);
-    res
-      .status(500)
-      .json({ error: "Failed to fetch total active subscriptions" });
-  }
-};
 
-
-//Total Monthly Revenue
-export const getTotalMonthlyRevenue = async (req, res) => {
-  try {
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-
-    const totalRevenue = await prisma.paymentTransaction.aggregate({
-      _sum: {
-        price: true,
-      },
-      where: {
-        status: "succeeded",
-        created_at: {
-          gte: startOfMonth,
+    const subscription = await prisma.subscription.findUnique({
+      where: { id },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            status: true,
+            role: true,
+            status: true,
+            deleted_at: true,
+          },
+        },
+        Services: true,
+        PaymentTransaction: {
+          orderBy: { created_at: "desc" },
+          take: 1,
         },
       },
     });
 
-    if (totalRevenue._sum.price === null) {
-      return res.status(201).json({ message: "0" });
-    }
-
-    res.json({ totalMonthlyRevenue: totalRevenue._sum.price || 0 });
-  } catch (error) {
-    console.error("Error fetching total monthly revenue:", error);
-    res.status(500).json({ error: "Failed to fetch total monthly revenue" });
-  }
-};
-
-
-//Get avg subscription value
-export const getAvgSubsctiptionValue = async (req, res) => {
-  try {
-    const totalRevenue = await prisma.paymentTransaction.aggregate({
-      _sum: {
-        price: true,
-      },
-      where: {
-        status: "succeeded",
+    const creatorSubscription = await prisma.creatorSubscription.findFirst({
+      where: { id },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            status: true,
+            role: true,
+            status: true,
+            deleted_at: true,
+          },
+        },
+        service: true,
+        PaymentTransaction: {
+          orderBy: { created_at: "desc" },
+          take: 1,
+        },
       },
     });
 
-    const totalSubscriptions = await prisma.subscription.count({
-      where: { status: "active" },
+    res.json({
+      success: true,
+      data: subscription ? subscription : creatorSubscription,
     });
-
-    const avgSubscriptionValue =
-      totalSubscriptions > 0 ? totalRevenue._sum.price / totalSubscriptions : 0;
-
-    if (avgSubscriptionValue === 0) {
-      return res.status(201).json({ message: "0" });
-    }
-
-    res.json({ avgSubscriptionValue });
   } catch (error) {
-    console.error("Error fetching average subscription value:", error);
-    res
-      .status(500)
-      .json({ error: "Failed to fetch average subscription value" });
+    console.error("Error fetching subscription:", error);
+    res.status(500).json({ error: "Failed to fetch subscription" });
   }
 };
 
@@ -282,7 +747,10 @@ async function createStripeSubscriptionViewerImpl(req, res) {
         next: {
           method: "POST",
           endpoint: "/api/payments/cancel-subscription",
-          body: { kind: "creator", subscriptionId: activeCreator.transaction_id },
+          body: {
+            kind: "creator",
+            subscriptionId: activeCreator.transaction_id,
+          },
         },
       });
     }
@@ -618,6 +1086,11 @@ async function onRecurringSuccess(invoice) {
     // Initialize/upgrade storage quota after successful subscription payment
     await upsertQuotaForPlanTx(tx, user_id, plan);
   });
+  await sendNotification({
+    receiverId: user_id,
+    type: "subscription.payment_succeeded",
+    text: "Your subscription payment succeeded. Your plan is active.",
+  });
 }
 
 async function cancelViewerSubscriptionForUpgrade(userId) {
@@ -683,12 +1156,13 @@ async function onCreatorRecurringSuccess(invoice, stripeSub) {
   const amount = invoice.amount_paid / 100;
   const currency = invoice.currency;
 
+  let creatorSubscriptionDbId = null;
+
   await prisma.$transaction(async (tx) => {
     const existingSub = await tx.creatorSubscription.findFirst({
       where: { transaction_id: subscriptionId },
     });
 
-    let creatorSubscriptionDbId;
     if (existingSub) {
       await tx.creatorSubscription.update({
         where: { id: existingSub.id },
@@ -751,6 +1225,13 @@ async function onCreatorRecurringSuccess(invoice, stripeSub) {
     // Creator subscription also grants viewer entitlements (quota) based on plan
     await upsertQuotaForPlanTx(tx, user_id, creatorPlan);
   });
+
+  await sendNotification({
+    receiverId: user_id,
+    type: "creator_subscription.payment_succeeded",
+    entityId: creatorSubscriptionDbId || null,
+    text: "Your creator subscription payment succeeded. Your creator plan is active.",
+  });
 }
 
 async function onSubscriptionUpdated(subscription) {
@@ -804,7 +1285,11 @@ async function onSubscriptionUpdated(subscription) {
           where: { id: metaUserId },
           data: { is_subscribed: true, role: "creator" },
         });
-        await upsertQuotaForPlanTx(tx, metaUserId, creatorActive.plan || creatorActive.service?.plan);
+        await upsertQuotaForPlanTx(
+          tx,
+          metaUserId,
+          creatorActive.plan || creatorActive.service?.plan,
+        );
         return;
       }
 
@@ -845,7 +1330,11 @@ async function onSubscriptionUpdated(subscription) {
             where: { id: dbUser.id },
             data: { is_subscribed: true, role: "creator" },
           });
-          await upsertQuotaForPlanTx(tx, dbUser.id, creatorActive.plan || creatorActive.service?.plan);
+          await upsertQuotaForPlanTx(
+            tx,
+            dbUser.id,
+            creatorActive.plan || creatorActive.service?.plan,
+          );
           return;
         }
 
@@ -854,7 +1343,11 @@ async function onSubscriptionUpdated(subscription) {
             where: { id: dbUser.id },
             data: { is_subscribed: true, role: "premium" },
           });
-          await upsertQuotaForPlanTx(tx, dbUser.id, subscription.metadata?.plan);
+          await upsertQuotaForPlanTx(
+            tx,
+            dbUser.id,
+            subscription.metadata?.plan,
+          );
         } else {
           await tx.user.update({
             where: { id: dbUser.id },
@@ -890,7 +1383,11 @@ async function onCreatorSubscriptionUpdated(subscription) {
       status: normalizedStatus,
       ...(nextEnd ? { end_date: nextEnd, renewal_date: nextEnd } : undefined),
       ...(subscription.metadata?.creator_plan
-        ? { plan: normalizeCreatorPlan(subscription.metadata.creator_plan) ?? undefined }
+        ? {
+            plan:
+              normalizeCreatorPlan(subscription.metadata.creator_plan) ??
+              undefined,
+          }
         : undefined),
     },
   });
@@ -911,7 +1408,11 @@ async function onCreatorSubscriptionUpdated(subscription) {
           where: { id: metaUserId },
           data: { role: "creator", is_subscribed: true },
         });
-        await upsertQuotaForPlanTx(tx, metaUserId, viewer?.plan || creatorPlanMeta);
+        await upsertQuotaForPlanTx(
+          tx,
+          metaUserId,
+          viewer?.plan || creatorPlanMeta,
+        );
       } else if (viewer?.plan) {
         await tx.user.update({
           where: { id: metaUserId },
@@ -949,7 +1450,11 @@ async function onCreatorSubscriptionUpdated(subscription) {
             where: { id: dbUser.id },
             data: { role: "creator", is_subscribed: true },
           });
-          await upsertQuotaForPlanTx(tx, dbUser.id, viewer?.plan || creatorPlanMeta);
+          await upsertQuotaForPlanTx(
+            tx,
+            dbUser.id,
+            viewer?.plan || creatorPlanMeta,
+          );
         } else if (viewer?.plan) {
           await tx.user.update({
             where: { id: dbUser.id },
@@ -993,6 +1498,11 @@ async function onRecurringFailed(invoice) {
       : null;
 
     if (dbUser?.id) {
+      await sendNotification({
+        receiverId: dbUser.id,
+        type: "creator_subscription.payment_failed",
+        text: "Your creator subscription payment failed. Please update your payment method.",
+      });
       const viewer = await prisma.subscription.findFirst({
         where: { user_id: dbUser.id, status: "active" },
         select: { plan: true },
@@ -1017,7 +1527,9 @@ async function onRecurringFailed(invoice) {
       // Best-effort fallback when customer_id is not available
       await prisma.user.updateMany({
         where: {
-          CreatorSubscription: { some: { transaction_id: invoice.subscription } },
+          CreatorSubscription: {
+            some: { transaction_id: invoice.subscription },
+          },
         },
         data: { role: "normal", is_subscribed: false },
       });
@@ -1046,12 +1558,19 @@ async function onRecurringFailed(invoice) {
       })
     : null;
   if (dbUser?.id) {
+    await sendNotification({
+      receiverId: dbUser.id,
+      type: "subscription.payment_failed",
+      text: "Your subscription payment failed. Please update your payment method.",
+    });
     const activeCreator = await prisma.creatorSubscription.findFirst({
       where: { user_id: dbUser.id, status: "active" },
       select: { id: true },
     });
     if (!activeCreator) {
-      await prisma.userStorageQuota.deleteMany({ where: { user_id: dbUser.id } });
+      await prisma.userStorageQuota.deleteMany({
+        where: { user_id: dbUser.id },
+      });
     }
   }
 }
@@ -1077,6 +1596,11 @@ async function onSubscriptionCanceled(subscription) {
         : null;
 
     if (dbUser?.id) {
+      await sendNotification({
+        receiverId: dbUser.id,
+        type: "creator_subscription.canceled",
+        text: "Your creator subscription was canceled.",
+      });
       const viewer = await prisma.subscription.findFirst({
         where: { user_id: dbUser.id, status: "active" },
         select: { plan: true },
@@ -1135,12 +1659,19 @@ async function onSubscriptionCanceled(subscription) {
       : null;
 
   if (dbUser?.id) {
+    await sendNotification({
+      receiverId: dbUser.id,
+      type: "subscription.canceled",
+      text: "Your subscription was canceled.",
+    });
     const activeCreator = await prisma.creatorSubscription.findFirst({
       where: { user_id: dbUser.id, status: "active" },
       select: { id: true },
     });
     if (!activeCreator) {
-      await prisma.userStorageQuota.deleteMany({ where: { user_id: dbUser.id } });
+      await prisma.userStorageQuota.deleteMany({
+        where: { user_id: dbUser.id },
+      });
     }
   }
 }
@@ -1162,13 +1693,16 @@ async function createCreatorStripeSubscriptionInternal(req, res) {
       });
     }
     if (role === "admin") {
-      return res.status(403).json({ error: "Admins cannot subscribe as creator" });
+      return res
+        .status(403)
+        .json({ error: "Admins cannot subscribe as creator" });
     }
 
     const service = await prisma.creatorService.findUnique({
       where: { id: creatorServiceId },
     });
-    if (!service) return res.status(404).json({ error: "Creator plan not found" });
+    if (!service)
+      return res.status(404).json({ error: "Creator plan not found" });
 
     let user = await prisma.user.findUnique({ where: { id: userId } });
 
@@ -1234,19 +1768,22 @@ async function createCreatorStripeSubscriptionInternal(req, res) {
           .json({ error: "Could not find Stripe subscription item to update" });
       }
 
-      subscription = await stripe.subscriptions.update(existingSub.transaction_id, {
-        cancel_at_period_end: false,
-        items: [{ id: stripeItemId, price: priceId }],
-        // Ensure an immediate invoice/payment is generated for the plan change.
-        proration_behavior: "always_invoice",
-        expand: ["latest_invoice.payment_intent"],
-        metadata: {
-          kind: "creator",
-          user_id: userId,
-          creator_service_id: creatorServiceId,
-          creator_plan: service.plan,
+      subscription = await stripe.subscriptions.update(
+        existingSub.transaction_id,
+        {
+          cancel_at_period_end: false,
+          items: [{ id: stripeItemId, price: priceId }],
+          // Ensure an immediate invoice/payment is generated for the plan change.
+          proration_behavior: "always_invoice",
+          expand: ["latest_invoice.payment_intent"],
+          metadata: {
+            kind: "creator",
+            user_id: userId,
+            creator_service_id: creatorServiceId,
+            creator_plan: service.plan,
+          },
         },
-      });
+      );
 
       await prisma.creatorSubscription.update({
         where: { id: existingSub.id },
@@ -1256,7 +1793,10 @@ async function createCreatorStripeSubscriptionInternal(req, res) {
         },
       });
 
-      if (subscription.status === "active" || subscription.status === "trialing") {
+      if (
+        subscription.status === "active" ||
+        subscription.status === "trialing"
+      ) {
         await cancelViewerSubscriptionForUpgrade(userId);
       }
 
@@ -1611,14 +2151,15 @@ export const getSubscriptionStatus = async (req, res) => {
       }),
     ]);
 
-    const creatorService =
-      creatorSub?.creator_service_id
-        ? await prisma.creatorService.findUnique({
-            where: { id: creatorSub.creator_service_id },
-          })
-        : null;
+    const creatorService = creatorSub?.creator_service_id
+      ? await prisma.creatorService.findUnique({
+          where: { id: creatorSub.creator_service_id },
+        })
+      : null;
 
-    const creator = creatorSub ? { ...creatorSub, service: creatorService } : null;
+    const creator = creatorSub
+      ? { ...creatorSub, service: creatorService }
+      : null;
 
     const viewerCanceledByUpgrade =
       !viewer &&
@@ -1632,7 +2173,11 @@ export const getSubscriptionStatus = async (req, res) => {
 
     return res.status(200).json({
       viewer: viewer
-        ? { isSubscribed: true, subscription: viewer, viewerCanceledByUpgrade: false }
+        ? {
+            isSubscribed: true,
+            subscription: viewer,
+            viewerCanceledByUpgrade: false,
+          }
         : { isSubscribed: false, viewerCanceledByUpgrade },
       creator: creator
         ? { isCreatorSubscribed: true, subscription: creator }
@@ -1692,4 +2237,3 @@ export const getPlans = async (req, res) => {
     return res.status(500).json({ error: "Failed to fetch plans" });
   }
 };
-

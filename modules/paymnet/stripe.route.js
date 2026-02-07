@@ -1,23 +1,21 @@
 import express from "express";
 import {
   getAllSubscriptions,
-  getTotalSubscribers,
-  getTotalActiveSubscriptions,
-  getTotalMonthlyRevenue,
-  getAvgSubsctiptionValue,
+  getSubscriptionDashboardStats,
   getSavedPaymentMethods,
   createStripeSubscription,
   handleStripeWebhook,
   cancelStripeSubscription,
   getSubscriptionStatus,
   getPlans,
+  getSubscriptionById,
 } from "./stripe.controller.js";
 import { verifyUser } from "../../middlewares/verifyUsers.js";
 
 const router = express.Router();
 
 router.post("/webhook", handleStripeWebhook);
-router.get("/getAllSubscriptions", verifyUser("admin"), getAllSubscriptions);
+
 router.get("/plans", verifyUser("normal", "premium", "creator"), getPlans);
 
 router.get(
@@ -25,11 +23,13 @@ router.get(
   verifyUser("normal", "premium", "creator"),
   getSavedPaymentMethods,
 );
+
 router.post(
   "/subscribe",
   verifyUser("normal", "premium", "creator"),
   createStripeSubscription,
 );
+
 router.post(
   "/cancel-subscription",
   verifyUser("normal", "premium", "creator"),
@@ -42,15 +42,15 @@ router.get(
   getSubscriptionStatus,
 );
 
-// Subscription
+// admin analytics routes
+router.get("/getAllSubscriptions", verifyUser("admin"), getAllSubscriptions);
 
-router.get("/totalSubscribers", verifyUser("admin"), getTotalSubscribers);
 router.get(
-  "/totalActiveSubscribers",
+  "/subscriptions/stats",
   verifyUser("admin"),
-  getTotalActiveSubscriptions,
+  getSubscriptionDashboardStats,
 );
-router.get("/totalMonthlyRevenue", verifyUser("admin"), getTotalMonthlyRevenue);
-router.get("/totalAvgSubValue", verifyUser("admin"), getAvgSubsctiptionValue);
+
+router.get("/subscriptions/:id", verifyUser("admin"), getSubscriptionById);
 
 export default router;
