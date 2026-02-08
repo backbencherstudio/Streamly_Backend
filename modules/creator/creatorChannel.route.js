@@ -11,7 +11,7 @@ import {
   requestCreatorChannel,
   updateMyCreatorChannelPhoto,
   updateCreatorChannel,
-} from "./creator_channel.controller.js";
+} from "./creatorChannel.controller.js";
 
 const router = express.Router();
 

@@ -21,6 +21,8 @@ import supportRoutes from "./modules/helpSupport/support.route.js";
 import notificationRoutes from "./modules/notifications/notification.route.js";
 import adminCreatorChannelRoutes from "./modules/admin/creator_channels/creator_channels.route.js";
 import adminCreatorContentRoutes from "./modules/admin/creator_content/creator_content.route.js";
+import creatorChannelRoutes from "./modules/creator/creatorChannel.route.js";
+import creatorUploadRoutes from "./modules/creator/uploads/creatorUpload.route.js";
 import dashboard from "./modules/admin/dashboard/dashboard.route.js";
 import { swaggerSpec } from "./swagger/index.js";
 import swaggerUi from "swagger-ui-express";
@@ -51,23 +53,23 @@ const optionalRouteImport = async (modulePaths, label) => {
 };
 
 // Optional creator routes (prevents crash if missing on server)
-const creatorChannelRoutes = await optionalRouteImport(
-  [
-    "./modules/creator/creator_channel.route.js",
-    "./modules/Creator/creator_channel.route.js",
-  ],
-  "creatorChannelRoutes",
-);
+// const creatorChannelRoutes = await optionalRouteImport(
+//   [
+//     "./modules/creator/creator_channel.route.js",
+//     "./modules/Creator/creator_channel.route.js",
+//   ],
+//   "creatorChannelRoutes",
+// );
 
-const creatorUploadRoutes = await optionalRouteImport(
-  [
-    "./modules/creator/uploads/creator_upload.route.js",
-    "./modules/creator/Uploads/creator_upload.route.js",
-    "./modules/Creator/uploads/creator_upload.route.js",
-    "./modules/Creator/Uploads/creator_upload.route.js",
-  ],
-  "creatorUploadRoutes",
-);
+// const creatorUploadRoutes = await optionalRouteImport(
+//   [
+//     "./modules/creator/uploads/creator_upload.route.js",
+//     "./modules/creator/Uploads/creator_upload.route.js",
+//     "./modules/Creator/uploads/creator_upload.route.js",
+//     "./modules/Creator/Uploads/creator_upload.route.js",
+//   ],
+//   "creatorUploadRoutes",
+// );
 
 const app = express();
 const server = http.createServer(app);
@@ -298,8 +300,8 @@ app.use("/api/support", supportRoutes);
 app.use("/api/admin", dashboard);
 
 // Creator flow
-if (creatorChannelRoutes) app.use("/api/creator", creatorChannelRoutes);
-if (creatorUploadRoutes) app.use("/api/creator/uploads", creatorUploadRoutes);
+app.use("/api/creator", creatorChannelRoutes);
+app.use("/api/creator/uploads", creatorUploadRoutes);
 app.use("/api/admin/creator", adminCreatorChannelRoutes);
 app.use("/api/admin/creator", adminCreatorContentRoutes);
 
