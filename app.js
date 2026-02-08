@@ -19,8 +19,6 @@ import downloadRoutes from "./modules/Download/download.route.js";
 import adminSettingsRoutes from "./modules/admin/settings/admin_settigns.route.js";
 import supportRoutes from "./modules/helpSupport/support.route.js";
 import notificationRoutes from "./modules/notifications/notification.route.js";
-import creatorChannelRoutes from "./modules/creator/creator_channel.route.js";
-import creatorUploadRoutes from "./modules/creator/uploads/creator_upload.route.js";
 import adminCreatorChannelRoutes from "./modules/admin/creator_channels/creator_channels.route.js";
 import adminCreatorContentRoutes from "./modules/admin/creator_content/creator_content.route.js";
 import dashboard from "./modules/admin/dashboard/dashboard.route.js";
@@ -34,6 +32,42 @@ import session from "express-session";
 import passport from "./config/passport.js";
 import http from "http";
 dotenv.config();
+
+const optionalRouteImport = async (modulePaths, label) => {
+  let lastErr = null;
+  for (const p of modulePaths) {
+    try {
+      const mod = await import(p);
+      return mod?.default || null;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  console.warn(
+    `[routes] ${label} not available; skipping.`,
+    lastErr?.message || lastErr,
+  );
+  return null;
+};
+
+// Optional creator routes (prevents crash if missing on server)
+const creatorChannelRoutes = await optionalRouteImport(
+  [
+    "./modules/creator/creator_channel.route.js",
+    "./modules/Creator/creator_channel.route.js",
+  ],
+  "creatorChannelRoutes",
+);
+
+const creatorUploadRoutes = await optionalRouteImport(
+  [
+    "./modules/creator/uploads/creator_upload.route.js",
+    "./modules/creator/Uploads/creator_upload.route.js",
+    "./modules/Creator/uploads/creator_upload.route.js",
+    "./modules/Creator/Uploads/creator_upload.route.js",
+  ],
+  "creatorUploadRoutes",
+);
 
 const app = express();
 const server = http.createServer(app);
@@ -264,8 +298,8 @@ app.use("/api/support", supportRoutes);
 app.use("/api/admin", dashboard);
 
 // Creator flow
-app.use("/api/creator", creatorChannelRoutes);
-app.use("/api/creator/uploads", creatorUploadRoutes);
+if (creatorChannelRoutes) app.use("/api/creator", creatorChannelRoutes);
+if (creatorUploadRoutes) app.use("/api/creator/uploads", creatorUploadRoutes);
 app.use("/api/admin/creator", adminCreatorChannelRoutes);
 app.use("/api/admin/creator", adminCreatorContentRoutes);
 
