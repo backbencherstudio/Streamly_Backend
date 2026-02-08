@@ -130,83 +130,77 @@ export const getHomeSections = async (req, res) => {
       return res.status(400).json({ message: "page must be >= 1" });
     }
 
-    // Get top categories by content count (with published status and not deleted)
-    const topCategories = await prisma.category.findMany({
+    const pinnedSlug = "streamly_original";
+    const pinnedCategory = await prisma.category.findFirst({
+      where: { slug: { equals: pinnedSlug, mode: "insensitive" } },
+      select: { id: true, name: true, slug: true, status: true },
+    });
+
+    const remainingSlots = pinnedCategory ? Math.max(limit - 1, 0) : limit;
+    const dynamicTopCategories = await prisma.category.findMany({
       where: {
+        ...(pinnedCategory ? { id: { not: pinnedCategory.id } } : {}),
         contents: {
           some: {
             content_status: "published",
             review_status: "approved",
             deleted_at: null,
-          }
-        }
-      },
-      include: {
-        _count: {
-          select: { contents: true }
-        }
+          },
+        },
       },
       orderBy: {
         contents: {
-          _count: "desc"
-        }
+          _count: "desc",
+        },
       },
-      take: limit
+      take: remainingSlots,
+      select: { id: true, name: true, slug: true, status: true },
     });
 
-    if (topCategories.length === 0) {
+    const categories = pinnedCategory
+      ? [pinnedCategory, ...dynamicTopCategories]
+      : dynamicTopCategories;
+
+    if (categories.length === 0) {
       return res.json({ sections: {}, page, take, total: 0 });
     }
 
     const sections = {};
 
-    // For each category, fetch popular content with pagination
-    for (const category of topCategories) {
+    for (const category of categories) {
       try {
-        const [ratings, totalCount] = await Promise.all([
-          prisma.rating.findMany({
-            where: {
-              content: {
-                category_id: category.id,
-                content_status: "published",
-                review_status: "approved",
-                deleted_at: null,
-              }
-            },
-            select: {
-              content_id: true,
-              rating: true
-            },
-            orderBy: {
-              rating: "desc"
-            },
+        const where = {
+          category_id: category.id,
+          content_status: "published",
+          review_status: "approved",
+          deleted_at: null,
+        };
+
+        const [contents, totalCount] = await Promise.all([
+          prisma.content.findMany({
+            where,
+            orderBy: { view_count: "desc" },
             skip: (page - 1) * take,
-            take
+            take,
+            include: { category: true },
           }),
-          prisma.rating.count({
-            where: {
-              content: {
-                category_id: category.id,
-                content_status: "published",
-                review_status: "approved",
-                deleted_at: null,
-              }
-            }
-          })
+          prisma.content.count({ where }),
         ]);
 
-        if (ratings.length === 0) continue;
-
-        const contentIds = ratings.map(r => r.content_id);
-        const contents = await prisma.content.findMany({
-          where: {
-            id: { in: contentIds },
-            content_status: "published",
-            review_status: "approved",
-            deleted_at: null,
-          },
-          include: { category: true }
-        });
+        if (contents.length === 0) {
+          if (pinnedCategory && category.id === pinnedCategory.id) {
+            const sectionKey =
+              category.slug || category.name || `category-${category.id}`;
+            sections[sectionKey] = {
+              items: [],
+              page,
+              take,
+              total: 0,
+              totalPages: 0,
+            };
+          }
+          continue;
+        }
 
         const sectionKey = category.slug || category.name || `category-${category.id}`;
         sections[sectionKey] = {
@@ -214,11 +208,13 @@ export const getHomeSections = async (req, res) => {
           page,
           take,
           total: totalCount,
-          totalPages: Math.ceil(totalCount / take)
+          totalPages: Math.ceil(totalCount / take),
         };
       } catch (categoryError) {
-        console.error(`Error fetching popular content for category ${category.id}:`, categoryError);
-        // Skip this category on error, continue with next
+        console.error(
+          `Error fetching popular content for category ${category.id}:`,
+          categoryError,
+        );
       }
     }
 
