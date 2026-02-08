@@ -35,42 +35,6 @@ import passport from "./config/passport.js";
 import http from "http";
 dotenv.config();
 
-const optionalRouteImport = async (modulePaths, label) => {
-  let lastErr = null;
-  for (const p of modulePaths) {
-    try {
-      const mod = await import(p);
-      return mod?.default || null;
-    } catch (e) {
-      lastErr = e;
-    }
-  }
-  console.warn(
-    `[routes] ${label} not available; skipping.`,
-    lastErr?.message || lastErr,
-  );
-  return null;
-};
-
-// Optional creator routes (prevents crash if missing on server)
-// const creatorChannelRoutes = await optionalRouteImport(
-//   [
-//     "./modules/creator/creator_channel.route.js",
-//     "./modules/Creator/creator_channel.route.js",
-//   ],
-//   "creatorChannelRoutes",
-// );
-
-// const creatorUploadRoutes = await optionalRouteImport(
-//   [
-//     "./modules/creator/uploads/creator_upload.route.js",
-//     "./modules/creator/Uploads/creator_upload.route.js",
-//     "./modules/Creator/uploads/creator_upload.route.js",
-//     "./modules/Creator/Uploads/creator_upload.route.js",
-//   ],
-//   "creatorUploadRoutes",
-// );
-
 const app = express();
 const server = http.createServer(app);
 const prisma = new PrismaClient();
