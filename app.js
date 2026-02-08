@@ -22,7 +22,7 @@ import notificationRoutes from "./modules/notifications/notification.route.js";
 import adminCreatorChannelRoutes from "./modules/admin/creator_channels/creator_channels.route.js";
 import adminCreatorContentRoutes from "./modules/admin/creator_content/creator_content.route.js";
 import creatorChannelRoutes from "./modules/creator/creatorChannel.route.js";
-import creatorUploadRoutes from "./modules/creator/uploads/creatorUpload.route.js";
+import creatorUploadRoutes from "./modules/creator/creatorUpload.route.js";
 import dashboard from "./modules/admin/dashboard/dashboard.route.js";
 import { swaggerSpec } from "./swagger/index.js";
 import swaggerUi from "swagger-ui-express";
