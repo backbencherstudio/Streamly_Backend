@@ -257,34 +257,54 @@ export const registerUser = async (req, res) => {
       return res.status(400).json({ message: "Email already registered" });
     }
 
-    // Check temp user
-    const existingTemp = await prisma.temp.findFirst({
-      where: { email, type: "REGISTER" },
-    });
-
-    if (existingTemp && new Date() < new Date(existingTemp.expires_at)) {
+    const existingTemp = await prisma.temp.findUnique({ where: { email } });
+    if (
+      existingTemp &&
+      existingTemp.type === "REGISTER" &&
+      new Date() < new Date(existingTemp.expires_at)
+    ) {
       return res.status(400).json({
         message: "OTP already sent. Please wait before requesting again.",
       });
     }
 
-    // Delete expired temp
-    if (existingTemp) {
-      await prisma.temp.delete({ where: { email, type: "REGISTER" } });
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+    let otp;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        otp = generateOTP();
+        await prisma.temp.upsert({
+          where: { email },
+          create: {
+            email,
+            password, // store raw OR hashed (better: hash here)
+            name,
+            otp,
+            type: "REGISTER",
+            expires_at: expiresAt,
+            is_verified: 0,
+          },
+          update: {
+            password,
+            name,
+            otp,
+            type: "REGISTER",
+            expires_at: expiresAt,
+            is_verified: 0,
+          },
+        });
+        break;
+      } catch (e) {
+        if (e?.code === "P2002" && e?.meta?.target?.includes("otp")) {
+          continue;
+        }
+        throw e;
+      }
     }
 
-    const otp = generateOTP();
-
-    await prisma.temp.create({
-      data: {
-        email,
-        password, // store raw OR hashed (better: hash here)
-        name,
-        otp,
-        type: "REGISTER",
-        expires_at: new Date(Date.now() + 15 * 60 * 1000),
-      },
-    });
+    if (!otp) {
+      return res.status(500).json({ message: "Failed to generate OTP" });
+    }
 
     await sendRegistrationOTPEmail(email, otp);
 
@@ -527,31 +547,13 @@ export const forgotPasswordOTPsend = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    const existingTempUser = await prisma.temp.findFirst({
-      where: { email, type: "FORGOT" },
-    });
+    const existingTempUser = await prisma.temp.findUnique({ where: { email } });
 
-    if (existingTempUser) {
-      if (new Date() > new Date(existingTempUser.expires_at)) {
-        await prisma.temp.delete({ where: { email, type: "FORGOT" } });
-
-        const otp = generateOTP();
-        await prisma.temp.create({
-          data: {
-            email,
-            otp,
-            type: "FORGOT",
-            expires_at: new Date(Date.now() + 15 * 60 * 1000),
-          },
-        });
-
-        sendForgotPasswordOTP(email, otp);
-
-        return res.status(200).json({
-          message: "OTP expired. A new OTP has been sent to your email.",
-        });
-      }
-
+    if (
+      existingTempUser &&
+      existingTempUser.type === "FORGOT" &&
+      new Date() <= new Date(existingTempUser.expires_at)
+    ) {
       return res.status(400).json({
         message:
           "An OTP has already been sent to this email. Please check your inbox or wait for expiration.",
@@ -559,18 +561,51 @@ export const forgotPasswordOTPsend = async (req, res) => {
       });
     }
 
-    const otp = generateOTP();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+    let otp;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        otp = generateOTP();
+        await prisma.temp.upsert({
+          where: { email },
+          create: {
+            email,
+            otp,
+            type: "FORGOT",
+            expires_at: expiresAt,
+            is_verified: 0,
+            password: null,
+            name: null,
+          },
+          update: {
+            otp,
+            type: "FORGOT",
+            expires_at: expiresAt,
+            is_verified: 0,
+            password: null,
+            name: null,
+          },
+        });
+        break;
+      } catch (e) {
+        if (e?.code === "P2002" && e?.meta?.target?.includes("otp")) {
+          continue;
+        }
+        throw e;
+      }
+    }
 
-    await prisma.temp.create({
-      data: {
-        email,
-        otp,
-        type: "FORGOT",
-        expires_at: new Date(Date.now() + 15 * 60 * 1000),
-      },
-    });
+    if (!otp) {
+      return res.status(500).json({ message: "Failed to generate OTP" });
+    }
 
     sendForgotPasswordOTP(email, otp);
+
+    if (existingTempUser && existingTempUser.type === "FORGOT") {
+      return res.status(200).json({
+        message: "OTP expired. A new OTP has been sent to your email.",
+      });
+    }
 
     return res.status(200).json({
       message:
@@ -587,7 +622,7 @@ export const resendForgotPasswordOTP = async (req, res) => {
   try {
     const { email, type } = req.body;
 
-    if (!email && !type) {
+    if (!email || !type) {
       return res.status(400).json({ message: "Email and type are required" });
     }
 
@@ -598,23 +633,39 @@ export const resendForgotPasswordOTP = async (req, res) => {
     //   return res.status(404).json({ message: "User not found" });
     // }
 
-    const existingTempUser = await prisma.temp.findFirst({
-      where: { email, type },
-    });
-
-    if (existingTempUser) {
-      await prisma.temp.delete({ where: { email, type } });
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+    let otp;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        otp = generateOTP();
+        await prisma.temp.upsert({
+          where: { email },
+          create: {
+            email,
+            otp,
+            type,
+            expires_at: expiresAt,
+            is_verified: 0,
+          },
+          update: {
+            otp,
+            type,
+            expires_at: expiresAt,
+            is_verified: 0,
+          },
+        });
+        break;
+      } catch (e) {
+        if (e?.code === "P2002" && e?.meta?.target?.includes("otp")) {
+          continue;
+        }
+        throw e;
+      }
     }
 
-    const otp = generateOTP();
-    await prisma.temp.create({
-      data: {
-        email,
-        otp,
-        type,
-        expires_at: new Date(Date.now() + 15 * 60 * 1000),
-      },
-    });
+    if (!otp) {
+      return res.status(500).json({ message: "Failed to generate OTP" });
+    }
 
     sendForgotPasswordOTP(email, otp);
 
