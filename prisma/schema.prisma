@@ -18,7 +18,10 @@ model Temp {
   id          String   @id @default(cuid())
   created_at  DateTime @default(now())
   email       String   @unique
+  password    String?
+  name        String?
   otp         String   @unique
+  type        String?  // "REGISTER" or "FORGOT"
   expires_at  DateTime
   is_verified Int?     @default(0) // 0 for not verified, 1 for verified
 
@@ -91,6 +94,7 @@ model User {
   suspend_endTime DateTime?
   state           String?
   postal_code     String?
+  email_verified   Boolean   @default(false)
 
   deactivation_start_date DateTime?
   deactivation_end_date   DateTime?

@@ -8,6 +8,7 @@ import {
   generateOTP,
   receiveEmails,
   sendForgotPasswordOTP,
+  sendRegistrationOTPEmail,
 } from "../../utils/mailService.js";
 import fs from "fs";
 import path from "path";
@@ -127,11 +128,106 @@ export const getMe = async (req, res) => {
 
 //--------------------register user--------------------
 // Register a new user
+// export const registerUser = async (req, res) => {
+//   try {
+//     const { email, password, name } = req.body;
+
+//     // Input validation
+//     if (!email || !password || !name) {
+//       return res.status(400).json({ message: "All fields are required" });
+//     }
+
+//     if (!isEmail(email)) {
+//       return res.status(400).json({ message: "Invalid email format" });
+//     }
+
+//     if (password.length < 8) {
+//       return res
+//         .status(400)
+//         .json({ message: "Password must be at least 8 characters long" });
+//     }
+
+//     if (name.length < 3) {
+//       return res
+//         .status(400)
+//         .json({ message: "Name must be at least 3 characters long" });
+//     }
+
+//     // Check if user already exists
+//     const existingUser = await prisma.user.findUnique({
+//       where: { email },
+//     });
+//     if (existingUser) {
+//       return res.status(400).json({ message: "Email already registered" });
+//     }
+
+//     // Hash password and create new user
+//     // const hashedPassword = await hashPassword(password);
+//     // const newUser = await prisma.user.create({
+//     //   data: {
+//     //     email,
+//     //     password: hashedPassword,
+//     //     name,
+//     //   },
+//     // });
+
+//     // otp generation and sending mail
+//     const existingTempUser = await prisma.temp.findUnique({
+//       where: { email },
+//     });
+
+//     if (existingTempUser) {
+//       if (new Date() > new Date(existingTempUser.expires_at)) {
+//         await prisma.temp.delete({ where: { email } });
+
+//         const otp = generateOTP();
+//         await prisma.temp.create({
+//           data: {
+//             email,
+//             otp,
+//             expires_at: new Date(Date.now() + 15 * 60 * 1000),
+//           },
+//         });
+
+//         sendRegistrationOTPEmail(email, otp);
+
+//         return res.status(200).json({
+//           message: "OTP expired. A new OTP has been sent to your email.",
+//         });
+//       }
+
+//       return res.status(400).json({
+//         message:
+//           "An OTP has already been sent to this email. Please check your inbox or wait for expiration.",
+//         shouldResendOtp: false,
+//       });
+//     }
+
+//     const otp = generateOTP();
+
+//     await prisma.temp.create({
+//       data: {
+//         email,
+//         otp,
+//         expires_at: new Date(Date.now() + 15 * 60 * 1000),
+//       },
+//     });
+
+//     sendRegistrationOTPEmail(email, otp);
+
+//     return res.status(201).json({
+//       success: true,
+//       message: "User registered successfully",
+//     });
+//   } catch (error) {
+//     console.error("Error in registerUser:", error);
+//     return res.status(500).json({ message: "Internal Server Error" });
+//   }
+// };
 export const registerUser = async (req, res) => {
   try {
     const { email, password, name } = req.body;
 
-    // Input validation
     if (!email || !password || !name) {
       return res.status(400).json({ message: "All fields are required" });
     }
@@ -141,44 +237,110 @@ export const registerUser = async (req, res) => {
     }
 
     if (password.length < 8) {
-      return res
-        .status(400)
-        .json({ message: "Password must be at least 8 characters long" });
+      return res.status(400).json({
+        message: "Password must be at least 8 characters long",
+      });
     }
 
     if (name.length < 3) {
-      return res
-        .status(400)
-        .json({ message: "Name must be at least 3 characters long" });
+      return res.status(400).json({
+        message: "Name must be at least 3 characters long",
+      });
     }
 
-    // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
+    // Check existing user
+    const existingUser = await prisma.user.findFirst({
       where: { email },
     });
+
     if (existingUser) {
       return res.status(400).json({ message: "Email already registered" });
     }
 
-    // Hash password and create new user
-    const hashedPassword = await hashPassword(password);
-    const newUser = await prisma.user.create({
+    // Check temp user
+    const existingTemp = await prisma.temp.findFirst({
+      where: { email, type: "REGISTER" },
+    });
+
+    if (existingTemp && new Date() < new Date(existingTemp.expires_at)) {
+      return res.status(400).json({
+        message: "OTP already sent. Please wait before requesting again.",
+      });
+    }
+
+    // Delete expired temp
+    if (existingTemp) {
+      await prisma.temp.delete({ where: { email, type: "REGISTER" } });
+    }
+
+    const otp = generateOTP();
+
+    await prisma.temp.create({
       data: {
         email,
-        password: hashedPassword,
+        password, // store raw OR hashed (better: hash here)
         name,
+        otp,
+        type: "REGISTER",
+        expires_at: new Date(Date.now() + 15 * 60 * 1000),
       },
     });
 
-    // Send the welcome notification
-    await sendWelcomeNotification(newUser.id, newUser.name);
+    await sendRegistrationOTPEmail(email, otp);
+
+    return res.status(200).json({
+      success: true,
+      message:
+        "OTP sent successfully to your email. Please verify it to complete registration.",
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+export const verifyRegisterOTP = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    const tempUser = await prisma.temp.findFirst({
+      where: { email, type: "REGISTER" },
+    });
+
+    if (!tempUser) {
+      return res.status(400).json({ message: "Invalid request" });
+    }
+
+    if (new Date() > new Date(tempUser.expires_at)) {
+      return res.status(400).json({ message: "OTP expired" });
+    }
+
+    if (tempUser.otp !== otp) {
+      return res.status(400).json({ message: "Invalid OTP" });
+    }
+
+    const hashedPassword = await hashPassword(tempUser.password);
+
+    const newUser = await prisma.user.create({
+      data: {
+        email: tempUser.email,
+        password: hashedPassword,
+        name: tempUser.name,
+        email_verified: true,
+      },
+    });
+
+    await prisma.temp.delete({ where: { id: tempUser.id } });
+
+    await sendWelcomeNotification(newUser.id);
 
     return res.status(201).json({
       success: true,
       message: "User registered successfully",
+      user: newUser,
     });
   } catch (error) {
-    console.error("Error in registerUser:", error);
+    console.error(error);
     return res.status(500).json({ message: "Internal Server Error" });
   }
 };
@@ -365,19 +527,20 @@ export const forgotPasswordOTPsend = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    const existingTempUser = await prisma.temp.findUnique({
-      where: { email },
+    const existingTempUser = await prisma.temp.findFirst({
+      where: { email, type: "FORGOT" },
     });
 
     if (existingTempUser) {
       if (new Date() > new Date(existingTempUser.expires_at)) {
-        await prisma.temp.delete({ where: { email } });
+        await prisma.temp.delete({ where: { email, type: "FORGOT" } });
 
         const otp = generateOTP();
         await prisma.temp.create({
           data: {
             email,
             otp,
+            type: "FORGOT",
             expires_at: new Date(Date.now() + 15 * 60 * 1000),
           },
         });
@@ -402,6 +565,7 @@ export const forgotPasswordOTPsend = async (req, res) => {
       data: {
         email,
         otp,
+        type: "FORGOT",
         expires_at: new Date(Date.now() + 15 * 60 * 1000),
       },
     });
@@ -421,23 +585,25 @@ export const forgotPasswordOTPsend = async (req, res) => {
 // Resent OTP
 export const resendForgotPasswordOTP = async (req, res) => {
   try {
-    const { email } = req.body;
-    if (!email) {
-      return res.status(400).json({ message: "Email is required" });
+    const { email, type } = req.body;
+
+    if (!email && !type) {
+      return res.status(400).json({ message: "Email and type are required" });
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email },
-    });
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
+    // const user = await prisma.user.findUnique({
+    //   where: { email },
+    // });
+    // if (!user) {
+    //   return res.status(404).json({ message: "User not found" });
+    // }
 
-    const existingTempUser = await prisma.temp.findUnique({
-      where: { email },
+    const existingTempUser = await prisma.temp.findFirst({
+      where: { email, type },
     });
+
     if (existingTempUser) {
-      await prisma.temp.delete({ where: { email } });
+      await prisma.temp.delete({ where: { email, type } });
     }
 
     const otp = generateOTP();
@@ -445,6 +611,7 @@ export const resendForgotPasswordOTP = async (req, res) => {
       data: {
         email,
         otp,
+        type,
         expires_at: new Date(Date.now() + 15 * 60 * 1000),
       },
     });
@@ -468,8 +635,8 @@ export const verifyForgotPasswordOTP = async (req, res) => {
     return res.status(400).json({ message: "OTP and email are required" });
   }
 
-  const existingTempUser = await prisma.temp.findUnique({
-    where: { email },
+  const existingTempUser = await prisma.temp.findFirst({
+    where: { email, type: "FORGOT" },
   });
 
   if (!existingTempUser) {
