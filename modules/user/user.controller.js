@@ -618,7 +618,7 @@ export const forgotPasswordOTPsend = async (req, res) => {
 };
 
 // Resent OTP
-export const resendForgotPasswordOTP = async (req, res) => {
+export const resendOTP = async (req, res) => {
   try {
     const { email, type } = req.body;
 
@@ -667,13 +667,19 @@ export const resendForgotPasswordOTP = async (req, res) => {
       return res.status(500).json({ message: "Failed to generate OTP" });
     }
 
-    sendForgotPasswordOTP(email, otp);
+    if (type === "REGISTER") {
+      await sendRegistrationOTPEmail(email, otp);
+    } else if (type === "FORGOT") {
+      await sendForgotPasswordOTP(email, otp);
+    } else {
+      return res.status(400).json({ message: "Invalid type value" });
+    }
 
     return res.status(200).json({
       message: "OTP resent successfully to your email.",
     });
   } catch (error) {
-    console.error("Error in resendForgotPasswordOTP:", error);
+    console.error("Error in resendOTP:", error);
     return res.status(500).json({ message: "Internal Server Error" });
   }
 };
