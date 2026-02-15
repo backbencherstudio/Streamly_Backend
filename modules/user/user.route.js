@@ -18,6 +18,7 @@ import {
   deleteUser,
   getUserDevices,
   removeUserDevice,
+  verifyRegisterOTP,
 } from "./user.controller.js";
 import { upload } from "../../config/Multer.config.js";
 import { verifyUser } from "../../middlewares/verifyUsers.js";
@@ -41,6 +42,7 @@ router.post("/upload", upload.single("file"), (req, res) => {
 
 // Register a user
 router.post("/registerUser", registerUser);
+router.post("/verify-register-otp", verifyRegisterOTP);
 
 // Log in a user
 router.post("/login", loginUser);
@@ -66,12 +68,12 @@ router.post("/forget_pass", forgotPasswordOTPsend);
 router.post("/resetPassOtpSend", resendForgotPasswordOTP);
 router.post("/checkForgetPassOtp", verifyForgotPasswordOTP);
 router.post("/resetPass", resetPassword);
-router.post("/change-password", verifyUser("normal"), changePassword);
+router.post("/change-password", verifyUser("ANY"), changePassword);
 
 // Update user image
 router.put(
   "/update-user-details",
-  verifyUser("normal", "premium", "admin"),
+  verifyUser("ANY"),
   updateUserDetails,
 );
 
@@ -83,7 +85,7 @@ router.put(
 );
 
 // Support
-router.post("/sende-mail", verifyUser("normal"), sendMailToAdmin);
+router.post("/sende-mail", verifyUser("ANY"), sendMailToAdmin);
 
 //get me
 router.get("/get-me", authenticateUser, getMe);
