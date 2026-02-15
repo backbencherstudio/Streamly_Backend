@@ -14,11 +14,11 @@ import {
   googleCallback,
   authenticateUser,
   updatePassword,
-  resendForgotPasswordOTP,
   deleteUser,
   getUserDevices,
   removeUserDevice,
   verifyRegisterOTP,
+  resendOTP,
 } from "./user.controller.js";
 import { upload } from "../../config/Multer.config.js";
 import { verifyUser } from "../../middlewares/verifyUsers.js";
@@ -65,7 +65,7 @@ router.get("/auth/google/logout", (req, res) => {
 
 // Forget password
 router.post("/forget_pass", forgotPasswordOTPsend);
-router.post("/resetPassOtpSend", resendForgotPasswordOTP);
+router.post("/resendOtp", resendOTP);
 router.post("/checkForgetPassOtp", verifyForgotPasswordOTP);
 router.post("/resetPass", resetPassword);
 router.post("/change-password", verifyUser("ANY"), changePassword);
