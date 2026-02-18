@@ -310,6 +310,7 @@ export const registerUser = async (req, res) => {
 
     return res.status(200).json({
       success: true,
+      otp: otp,
       message:
         "OTP sent successfully to your email. Please verify it to complete registration.",
     });
@@ -371,6 +372,8 @@ export const loginUser = async (req, res) => {
     const { email, password, deviceToken, deviceOS, deviceType, deviceName } =
       req.body;
 
+    let deviceTokenClaim = null;
+
     const missingField = ["email", "password"].find(
       (field) => !req.body[field],
     );
@@ -415,6 +418,20 @@ export const loginUser = async (req, res) => {
     }
 
     if (!isAdminUser) {
+      console.log("Login request device info:", {
+        deviceToken,
+        deviceOS,
+        deviceType,
+        deviceName,
+      });
+
+      if (!deviceToken) {
+        return res.status(400).json({
+          message: "deviceToken is required",
+          code: "DEVICE_TOKEN_REQUIRED",
+        });
+      }
+
       // Enforce device limit only when user has an active subscription (viewer or creator)
       const [activeViewerSub, activeCreatorSub] = await Promise.all([
         prisma.subscription.findFirst({
@@ -432,75 +449,88 @@ export const loginUser = async (req, res) => {
       );
       const maxDevices = 3;
 
-      if (hasActiveSubscription && !deviceToken) {
-        return res.status(400).json({
-          message: "deviceToken is required for subscribed users",
-          code: "DEVICE_TOKEN_REQUIRED",
+      const rawTokenValue = String(deviceToken).trim();
+      // Store a per-user token so the same physical device can log into multiple accounts
+      const storedTokenValue = `${user.id}::${rawTokenValue}`;
+      deviceTokenClaim = storedTokenValue;
+
+      // Try to find an existing token for THIS user (new format)
+      let existingToken = await prisma.deviceToken.findUnique({
+        where: { token: storedTokenValue },
+        select: { id: true },
+      });
+
+      // Backward compatibility: if the user already has legacy token stored without prefix,
+      // migrate it to the new namespaced format on first login.
+      if (!existingToken) {
+        const legacy = await prisma.deviceToken.findFirst({
+          where: { user_id: user.id, token: rawTokenValue },
+          select: { id: true },
         });
+        if (legacy) {
+          await prisma.deviceToken.update({
+            where: { id: legacy.id },
+            data: {
+              token: storedTokenValue,
+              device_os: deviceOS,
+              device_type: deviceType,
+              device_name: deviceName,
+            },
+          });
+          existingToken = { id: legacy.id };
+        }
       }
 
-      if (deviceToken) {
-        const tokenValue = String(deviceToken).trim();
-
-        const existingToken = await prisma.deviceToken.findUnique({
-          where: { token: tokenValue },
-          select: { id: true, user_id: true },
+      // Limit only for subscribed users
+      if (hasActiveSubscription) {
+        const userDeviceCount = await prisma.deviceToken.count({
+          where: { user_id: user.id },
         });
 
-        // Prevent reusing the same device token across multiple users
-        // if (existingToken && existingToken.user_id !== user.id) {
-        //   return res.status(409).json({
-        //     message: "This device is already linked to another account",
-        //     code: "DEVICE_TOKEN_IN_USE",
-        //   });
-        // }
+        const isKnownDevice = Boolean(existingToken);
 
-        if (hasActiveSubscription) {
-          const userDeviceCount = await prisma.deviceToken.count({
-            where: { user_id: user.id },
-          });
-
-          const isKnownDevice = Boolean(existingToken);
-
-          if (!isKnownDevice && userDeviceCount >= maxDevices) {
-            return res.status(403).json({
-              message: `Device limit reached. Max ${maxDevices} devices per subscription.`,
-              code: "DEVICE_LIMIT_REACHED",
-              maxDevices,
-              currentDevices: userDeviceCount,
-            });
-          }
-        }
-
-        // Save or update device token (do NOT reassign to other users)
-        if (existingToken) {
-          await prisma.deviceToken.update({
-            where: { token: tokenValue },
-            data: {
-              device_os: deviceOS,
-              device_type: deviceType,
-              device_name: deviceName,
-            },
-          });
-        } else {
-          await prisma.deviceToken.create({
-            data: {
-              user_id: user.id,
-              token: tokenValue,
-              device_os: deviceOS,
-              device_type: deviceType,
-              device_name: deviceName,
-            },
+        if (!isKnownDevice && userDeviceCount >= maxDevices) {
+          return res.status(403).json({
+            message: `Device limit reached. Max ${maxDevices} devices per subscription.`,
+            code: "DEVICE_LIMIT_REACHED",
+            maxDevices,
+            currentDevices: userDeviceCount,
           });
         }
+      }
+
+      // Always save/update device for non-admin users
+      if (existingToken) {
+        await prisma.deviceToken.update({
+          where: { id: existingToken.id },
+          data: {
+            device_os: deviceOS,
+            device_type: deviceType,
+            device_name: deviceName,
+          },
+        });
+      } else {
+        await prisma.deviceToken.create({
+          data: {
+            user_id: user.id,
+            token: storedTokenValue,
+            device_os: deviceOS,
+            device_type: deviceType,
+            device_name: deviceName,
+          },
+        });
       }
     }
 
-    const token = jwt.sign(
-      { userId: user.id, email: user.email, role: user.role, type: user.type },
-      getJwtSecret(),
-      { expiresIn: "30d" },
-    );
+    const tokenPayload = {
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+      type: user.type,
+      ...(deviceTokenClaim ? { deviceToken: deviceTokenClaim } : {}),
+    };
+
+    const token = jwt.sign(tokenPayload, getJwtSecret(), { expiresIn: "30d" });
 
     if (user.status === "deactivated") {
       return res.status(403).json({
@@ -800,11 +830,35 @@ export const authenticateUser = (req, res, next) => {
     });
   }
 
-  jwt.verify(token, secret, (err, decoded) => {
+  jwt.verify(token, secret, async (err, decoded) => {
     if (err) {
       return res.status(403).json({ message: "Invalid token" });
     }
     req.user = decoded; // Add user data to req.user
+
+    const isAdminUser =
+      String(req.user?.role || "").toLowerCase() === "admin" ||
+      String(req.user?.type || "").toLowerCase() === "admin";
+
+    if (!isAdminUser && req.user?.deviceToken) {
+      try {
+        const exists = await prisma.deviceToken.findUnique({
+          where: { token: String(req.user.deviceToken) },
+          select: { id: true, user_id: true },
+        });
+
+        if (!exists || exists.user_id !== req.user?.userId) {
+          return res.status(401).json({
+            message: "Device session revoked. Please login again.",
+            code: "DEVICE_LOGGED_OUT",
+          });
+        }
+      } catch (e) {
+        console.error("authenticateUser device check error:", e);
+        return res.status(500).json({ message: "Internal Server Error" });
+      }
+    }
+
     next();
   });
 };
@@ -1453,10 +1507,17 @@ export const getUserDevices = async (req, res) => {
       },
     });
 
+    const normalizedDevices = devices.map((d) => {
+      const tokenStr = String(d.token || "");
+      const prefix = `${userId}::`;
+      const raw = tokenStr.startsWith(prefix) ? tokenStr.slice(prefix.length) : tokenStr;
+      return { ...d, token: raw };
+    });
+
     return res.status(200).json({
       success: true,
       message: "User devices retrieved successfully",
-      data: devices,
+      data: normalizedDevices,
     });
   } catch (error) {
     console.error("Error retrieving user devices:", error);
@@ -1488,7 +1549,8 @@ export const removeUserDevice = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Device removed successfully",
+      message: "Device removed successfully. That device has been logged out.",
+      shouldLogout: true,
     });
   } catch (error) {
     console.error("Error removing user device:", error);

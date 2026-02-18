@@ -1,9 +1,12 @@
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
+import { PrismaClient } from "@prisma/client";
 dotenv.config();
 
+const prisma = new PrismaClient();
+
 export const verifyUser = (...allowedRoles) => {
-  return (req, res, next) => {
+  return async (req, res, next) => {
     const authHeader = req.headers["authorization"];
 
     if (!authHeader) {
@@ -27,6 +30,26 @@ export const verifyUser = (...allowedRoles) => {
 
       const decoded = jwt.verify(token, secret);
       req.user = decoded;
+
+      const isAdminUser =
+        String(req.user?.role || "").toLowerCase() === "admin" ||
+        String(req.user?.type || "").toLowerCase() === "admin";
+
+      // If the JWT contains a deviceToken claim, enforce it exists.
+      // This allows removing a device to effectively "log out" that device.
+      if (!isAdminUser && req.user?.deviceToken) {
+        const exists = await prisma.deviceToken.findUnique({
+          where: { token: String(req.user.deviceToken) },
+          select: { id: true, user_id: true },
+        });
+
+        if (!exists || exists.user_id !== req.user?.userId) {
+          return res.status(401).json({
+            message: "Device session revoked. Please login again.",
+            code: "DEVICE_LOGGED_OUT",
+          });
+        }
+      }
 
       if (
         allowedRoles.length &&
