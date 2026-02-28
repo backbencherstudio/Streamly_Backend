@@ -103,28 +103,24 @@ export const getRatingById = async (req, res) => {
 //------------------updateRating-------------------
 export const updateRating = async (req, res) => {
   try {
-    const { id } = req.params;
-
     const userId = req.user?.userId;
     if (!userId) {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const isAdminUser =
-      String(req.user?.role || "").toLowerCase() === "admin" ||
-      String(req.user?.type || "").toLowerCase() === "admin";
+    const { content_id } = req.params;
+    if (!content_id) {
+      return res.status(400).json({ message: "content_id is required" });
+    }
 
-    const existing = await prisma.rating.findUnique({
-      where: { id },
-      select: { id: true, user_id: true },
+    // Update the current user's rating for the given content
+    const existing = await prisma.rating.findFirst({
+      where: { user_id: userId, content_id },
+      select: { id: true, user_id: true, content_id: true },
     });
 
     if (!existing) {
-      return res.status(404).json({ message: "Rating not found" });
-    }
-
-    if (!isAdminUser && existing.user_id !== userId) {
-      return res.status(403).json({ message: "Forbidden" });
+      return res.status(404).json({ message: "Rating not found for this content" });
     }
 
     const { rating, comment } = req.body;
@@ -148,7 +144,7 @@ export const updateRating = async (req, res) => {
     }
 
     const updated = await prisma.rating.update({
-      where: { id },
+      where: { id: existing.id },
       data,
     });
 
@@ -159,11 +155,6 @@ export const updateRating = async (req, res) => {
     console.error("Error in updateRating:", error);
     if (error.code === "P2025") {
       return res.status(404).json({ message: "Rating not found" });
-    }
-    if (error.code === "P2002") {
-      return res
-        .status(409)
-        .json({ message: "Duplicate rating not allowed" });
     }
     return res.status(500).json({ message: "Internal Server Error" });
   }

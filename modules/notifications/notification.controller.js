@@ -65,7 +65,10 @@ export const getAllNotifications = async (req, res) => {
     }
 
     const pageNum = Math.max(1, parseInt(req.query.page ?? "1", 10));
-    const takeNum = Math.min(100, Math.max(1, parseInt(req.query.take ?? "20", 10)));
+    const takeNum = Math.min(
+      100,
+      Math.max(1, parseInt(req.query.take ?? "20", 10)),
+    );
     const skip = (pageNum - 1) * takeNum;
     const unreadOnly =
       String(req.query.unreadOnly ?? "false").toLowerCase() === "true";
@@ -280,6 +283,55 @@ export const markAllNotificationsRead = async (req, res) => {
     });
   } catch (error) {
     console.error("Error marking all notifications as read:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      error: error.message,
+    });
+  }
+};
+
+export const markNotificationUnread = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    const { id } = req.params;
+
+    if (!userId) {
+      return res
+        .status(401)
+        .json({ success: false, message: "User not authenticated" });
+    }
+
+    if (!id) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Notification id is required" });
+    }
+
+    const result = await prisma.notification.updateMany({
+      where: {
+        id,
+        receiver_id: userId,
+        deleted_at: null,
+      },
+      data: {
+        read_at: null,
+      },
+    });
+
+    if (result.count === 0) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Notification not found" });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Notification marked as unread",
+      id,
+    });
+  } catch (error) {
+    console.error("Error marking notification as unread:", error);
     return res.status(500).json({
       success: false,
       message: "Internal Server Error",

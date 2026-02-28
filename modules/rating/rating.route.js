@@ -11,15 +11,35 @@ import { verifyUser } from "../../middlewares/verifyUsers.js";
 
 const router = express.Router();
 
-router.post("/", verifyUser("normal", "premium", "creator", "admin"), createRating);
+router.post(
+  "/",
+  verifyUser("normal", "premium", "creator", "admin"),
+  createRating,
+);
 
-router.get("/", verifyUser("normal", "premium", "creator", "admin"), getAllRatings);
+router.get(
+  "/",
+  verifyUser("normal", "premium", "creator", "admin"),
+  getAllRatings,
+);
 
-router.get("/:id", verifyUser("normal", "premium", "creator", "admin"), getRatingById);
+router.get(
+  "/:id",
+  verifyUser("normal", "premium", "creator", "admin"),
+  getRatingById,
+);
 
-router.patch("/:id", verifyUser("normal", "premium", "creator", "admin"), updateRating);
+router.patch(
+  "/:content_id",
+  verifyUser("normal", "premium", "creator", "admin"),
+  updateRating,
+);
 
-router.delete("/:id", verifyUser("normal", "premium", "creator", "admin"), deleteRating);
+router.delete(
+  "/:id",
+  verifyUser("normal", "premium", "creator", "admin"),
+  deleteRating,
+);
 
 router.get("/top/ratings", verifyUser("admin"), topRatedContentThisWeek);
 
