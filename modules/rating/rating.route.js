@@ -17,7 +17,7 @@ router.get("/", verifyUser("normal", "premium", "creator", "admin"), getAllRatin
 
 router.get("/:id", verifyUser("normal", "premium", "creator", "admin"), getRatingById);
 
-router.put("/:id", verifyUser("normal", "premium", "creator", "admin"), updateRating);
+router.patch("/:id", verifyUser("normal", "premium", "creator", "admin"), updateRating);
 
 router.delete("/:id", verifyUser("normal", "premium", "creator", "admin"), deleteRating);
 
