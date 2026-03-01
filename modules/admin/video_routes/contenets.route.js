@@ -1,8 +1,6 @@
 import express from "express";
-import { PrismaClient } from "@prisma/client";
+import prisma from "../../prisma/prisma.js";
 import { verifyUser } from "../../../middlewares/verifyUsers.js";
-
-const prisma = new PrismaClient();
 const r = express.Router();
 
 const serialize = (data) =>

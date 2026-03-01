@@ -1,6 +1,4 @@
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import prisma from "../prisma/prisma.js";
 
 // Storage plan limits (in bytes) mapped to Subscription Plan
 export const PLAN_STORAGE_LIMITS = {

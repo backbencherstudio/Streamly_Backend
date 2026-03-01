@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 import validator from "validator";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { PrismaClient } from "@prisma/client";
+import prisma from "../prisma/prisma.js";
 import { userIdSocketMap } from "../../utils/notificationService.js";
 import {
   generateOTP,
@@ -22,7 +22,6 @@ import { s3 } from "../libs/s3Clinent.js";
 import { PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { randomUUID } from "crypto";
 
-const prisma = new PrismaClient();
 dotenv.config();
 const { isEmail } = validator;
 const __filename = fileURLToPath(import.meta.url);

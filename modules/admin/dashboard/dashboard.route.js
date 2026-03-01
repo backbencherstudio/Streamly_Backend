@@ -1,13 +1,10 @@
 import express from "express";
-import { PrismaClient } from "@prisma/client";
 import { verifyUser } from "../../../middlewares/verifyUsers.js";
 import {
   getAdminDashboardOverview,
   getSubscriptionGrowthAndTotalRevenue,
 } from "./dashboard.controller.js";
 import { getAllUsers } from "../users/users.controller.js";
-
-const prisma = new PrismaClient();
 const router = express.Router();
 
 // Admin dashboard overview

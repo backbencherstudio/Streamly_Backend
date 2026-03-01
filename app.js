@@ -6,7 +6,7 @@ import { fileURLToPath } from "url";
 import path from "path";
 import userRoutes from "./modules/user/user.route.js";
 import nodeCron from "node-cron";
-import { PrismaClient } from "@prisma/client";
+import prisma from "./modules/prisma/prisma.js";
 import uploadsRoutes from "./modules/admin/video_routes/uploads.route.js";
 import pay from "./modules/paymnet/stripe.route.js";
 import createRoutes from "./modules/admin/create-category/create_category.route.js";
@@ -37,7 +37,6 @@ dotenv.config();
 
 const app = express();
 const server = http.createServer(app);
-const prisma = new PrismaClient();
 app.set("json replacer", (key, value) =>
   typeof value === "bigint" ? value.toString() : value,
 );

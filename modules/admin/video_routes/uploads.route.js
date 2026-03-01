@@ -3,11 +3,9 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { randomUUID } from 'crypto';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../../prisma/prisma.js';
 import { mediaQueue } from '../../libs/queue.js';
 import { verifyAdmin } from '../../../middlewares/verifyAdmin.js';
-
-const prisma = new PrismaClient();
 const router = express.Router();
 
 const slugToArray = (value) => {

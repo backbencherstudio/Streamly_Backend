@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import prisma from "../prisma/prisma.js";
 import {
   calculateStorageUsed,
   checkQuotaAvailable,
@@ -11,7 +11,6 @@ import { Queue } from "bullmq";
 import { connection } from "../libs/queue.js";
 import fs from "fs";
 
-const prisma = new PrismaClient();
 const downloadQueue = new Queue("downloads", { connection });
 
 // URL helpers

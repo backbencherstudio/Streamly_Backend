@@ -1,7 +1,5 @@
-import { PrismaClient } from "@prisma/client";
 import { sendNotification } from "../../../utils/notificationService.js";
-
-const prisma = new PrismaClient();
+import prisma from "../../prisma/prisma.js";
 
 const parsePageTake = (req) => {
   const page = Math.max(parseInt(req.query.page || "1", 10) || 1, 1);

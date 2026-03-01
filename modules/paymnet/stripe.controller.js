@@ -1,11 +1,10 @@
 import { sendNotification } from "../../utils/notificationService.js";
 import Stripe from "stripe";
-import { PrismaClient } from "@prisma/client";
+import prisma from "../prisma/prisma.js";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   apiVersion: "2024-06-20",
 });
-const prisma = new PrismaClient();
 
 const QUOTA_GB = 1024n * 1024n * 1024n;
 const PLAN_QUOTA_BYTES = {

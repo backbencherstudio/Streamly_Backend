@@ -1,6 +1,4 @@
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import prisma from "../modules/prisma/prisma.js";
 
 export const verifyCreatorSubscribed = async (req, res, next) => {
   try {

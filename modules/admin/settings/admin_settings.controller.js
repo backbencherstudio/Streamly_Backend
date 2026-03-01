@@ -1,9 +1,8 @@
-import { PrismaClient } from "@prisma/client";
 import { emailReactivateUser } from "../../../constants/email_message.js";
 import { sendEmail } from "../../../utils/mailService.js";
 import { sendNotification } from "../../../utils/notificationService.js";
 import bcrypt from "bcryptjs";
-const prisma = new PrismaClient();
+import prisma from "../../prisma/prisma.js";
 
 export const myProfile = async (req, res) => {
   const userId = req.user?.userId;

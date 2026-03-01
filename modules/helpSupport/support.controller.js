@@ -1,9 +1,7 @@
-import { PrismaClient } from "@prisma/client";
+import prisma from "../prisma/prisma.js";
 import { sendEmail } from "../../utils/mailService.js";
 import { createAdminTicketNotificationEmail } from "../../constants/email_message.js";
 import { sendNotification, sendNotifications } from "../../utils/notificationService.js";
-
-const prisma = new PrismaClient();
 
 //---------------------create support ticket-------------------
 export const createSupportTicket = async (req, res) => {
