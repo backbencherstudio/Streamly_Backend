@@ -1,9 +1,7 @@
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
-import { PrismaClient } from "@prisma/client";
+import prisma from "../modules/prisma/prisma.js";
 dotenv.config();
-
-const prisma = new PrismaClient();
 
 export const verifyUser = (...allowedRoles) => {
   return async (req, res, next) => {

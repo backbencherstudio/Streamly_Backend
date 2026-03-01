@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { Worker } from 'bullmq';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../prisma/prisma.js';
 import { connection } from '../libs/queue.js';
 import { s3 } from '../libs/s3Clinent.js';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
@@ -12,8 +12,6 @@ import { sendNotification } from '../../utils/notificationService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-const prisma = new PrismaClient();
 
 // Base directory for downloads (local storage)
 const DOWNLOADS_DIR = path.join(process.cwd(), 'downloads');

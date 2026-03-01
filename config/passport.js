@@ -1,10 +1,9 @@
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
-import { PrismaClient } from "@prisma/client";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
+import prisma from "../modules/prisma/prisma.js";
 dotenv.config();
-const prisma = new PrismaClient();
 
 passport.use(
   new GoogleStrategy(

@@ -1,6 +1,5 @@
 import jwt from "jsonwebtoken";
-import { PrismaClient } from "@prisma/client";
-const prisma = new PrismaClient();
+import prisma from "../modules/prisma/prisma.js";
 
 export const verifyAdmin = async (req, res, next) => {
   try {

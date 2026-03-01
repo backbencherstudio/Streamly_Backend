@@ -1,11 +1,9 @@
-import { PrismaClient } from "@prisma/client";
+import prisma from "../prisma/prisma.js";
 import { s3 } from "../libs/s3Clinent.js";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 // NOTE: install @aws-sdk/s3-request-presigner if missing
 // npm i @aws-sdk/s3-request-presigner
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-
-const prisma = new PrismaClient();
 
 const PUBLIC_BASE_URL = process.env.APP_URL || "http://localhost:4005";
 const AWS_REGION = process.env.AWS_REGION || "us-east-1";

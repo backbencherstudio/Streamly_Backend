@@ -1,17 +1,12 @@
-// src/prisma/prismaClient.js
-const { PrismaClient } = require('@prisma/client');
+import { PrismaClient } from "@prisma/client";
 
-const prisma = new PrismaClient();
+const globalForPrisma = globalThis;
 
-// Manually connect and log
-async function connectDB() {
-  try {
-    await prisma.$connect();
-    console.log('Connected to PostgreSQL via Prisma!');
-  } catch (error) {
-    console.error('Failed to connect to the database:', error);
-    process.exit(1); 
-  }
+const prisma = globalForPrisma.__streamly_prisma ?? new PrismaClient();
+
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.__streamly_prisma = prisma;
 }
 
-module.exports = { prisma, connectDB };
+export default prisma;
+export { prisma };

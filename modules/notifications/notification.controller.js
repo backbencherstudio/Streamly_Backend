@@ -1,6 +1,4 @@
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import prisma from "../prisma/prisma.js";
 
 const buildPublicS3Url = ({ bucket, key }) => {
   if (!bucket || !key) return null;

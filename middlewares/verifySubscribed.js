@@ -1,7 +1,5 @@
-import { PrismaClient } from "@prisma/client";
 import { getStorageLimitByPlan } from "../modules/Download/storageHelper.js";
-
-const prisma = new PrismaClient();
+import prisma from "../modules/prisma/prisma.js";
 
 /**
  * Ensures the user has an active paid subscription (plan-based), and ensures

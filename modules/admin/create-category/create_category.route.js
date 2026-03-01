@@ -1,7 +1,6 @@
 import express from "express";
 import path from "path";
 import { randomUUID } from "crypto";
-import { PrismaClient } from "@prisma/client";
 import {
   createService,
   getAllServices,
@@ -17,8 +16,6 @@ import {
 } from "./create_category.controller.js";
 import { get } from "http";
 import { verifyAdmin } from "../../../middlewares/verifyAdmin.js";
-
-const prisma = new PrismaClient();
 const router = express.Router();
 
 // Category CRUD

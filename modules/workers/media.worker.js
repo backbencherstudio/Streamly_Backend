@@ -9,11 +9,9 @@ import { execFile } from 'node:child_process';
 import ffprobeStatic from 'ffprobe-static';
 import { Upload } from '@aws-sdk/lib-storage';
 import { s3 } from '../libs/s3Clinent.js';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../prisma/prisma.js';
 import { connection } from '../libs/queue.js';
 import { sendNotification } from '../../utils/notificationService.js';
-
-const prisma = new PrismaClient();
 const unlink = util.promisify(fs.unlink);
 const stat = util.promisify(fs.stat);
 const execFileAsync = util.promisify(execFile);

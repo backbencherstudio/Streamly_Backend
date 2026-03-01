@@ -1,11 +1,9 @@
 import fs from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
-import { PrismaClient } from "@prisma/client";
+import prisma from "../prisma/prisma.js";
 import { mediaQueue } from "../libs/queue.js";
 import { sendNotifications } from "../../utils/notificationService.js";
-
-const prisma = new PrismaClient();
 
 const PUBLIC_BASE_URL = process.env.APP_URL || "http://localhost:4005";
 const AWS_REGION = process.env.AWS_REGION || "us-east-1";

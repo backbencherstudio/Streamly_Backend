@@ -1,7 +1,5 @@
-import { PrismaClient } from "@prisma/client";
 import { sendNotification } from "../../../utils/notificationService.js";
-
-const prisma = new PrismaClient();
+import prisma from "../../prisma/prisma.js";
 
 const PUBLIC_BASE_URL = process.env.APP_URL || "http://localhost:4005";
 const AWS_REGION = process.env.AWS_REGION || "us-east-1";

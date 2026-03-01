@@ -1,11 +1,9 @@
-import { PrismaClient } from "@prisma/client";
 import {
   emailSuspendUser,
   emailUnsuspendUser,
 } from "../../../constants/email_message.js";
 import { sendEmail } from "../../../utils/mailService.js";
-
-const prisma = new PrismaClient();
+import prisma from "../../prisma/prisma.js";
 
 const PUBLIC_BASE_URL = process.env.APP_URL || "http://localhost:4005";
 const AWS_REGION = process.env.AWS_REGION || "us-east-1";

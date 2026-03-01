@@ -1,4 +1,4 @@
-import { PrismaClient, ChannelCategory } from "@prisma/client";
+import { ChannelCategory } from "@prisma/client";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -6,8 +6,7 @@ import { randomUUID } from "crypto";
 import { s3 } from "../libs/s3Clinent.js";
 import { PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { sendNotifications } from "../../utils/notificationService.js";
-
-const prisma = new PrismaClient();
+import prisma from "../prisma/prisma.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

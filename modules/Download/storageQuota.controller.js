@@ -1,12 +1,10 @@
-import { PrismaClient } from "@prisma/client";
+import prisma from "../prisma/prisma.js";
 import {
   formatBytes,
   getUserStorageInfo,
   upgradeStorageQuota,
   createUserStorageQuota,
 } from "./storageHelper.js";
-
-const prisma = new PrismaClient();
 
 // Helper: Serialize BigInt to String
 const serialize = (data) =>
