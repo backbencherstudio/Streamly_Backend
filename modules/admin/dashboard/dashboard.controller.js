@@ -30,6 +30,54 @@ const addUtcMonths = (date, months) => {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + months, 1));
 };
 
+const MONTH_LABELS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+const resolveDashboardPeriod = (period, year) => {
+  const now = new Date();
+  const periodInput = String(period || "yearly").toLowerCase();
+  const requestedYear = Number(year);
+  const selectedYear = Number.isInteger(requestedYear)
+    ? requestedYear
+    : now.getUTCFullYear();
+
+  const isYearly = !["7d", "30d", "90d"].includes(periodInput);
+
+  let start;
+  let end;
+  let days;
+
+  if (isYearly) {
+    start = new Date(Date.UTC(selectedYear, 0, 1));
+    end = new Date(Date.UTC(selectedYear + 1, 0, 1));
+    days = Math.round((end.getTime() - start.getTime()) / 86400000);
+  } else {
+    end = startOfUtcDay(now);
+    days = periodInput === "30d" ? 30 : periodInput === "90d" ? 90 : 7;
+    start = addUtcDays(end, -days);
+  }
+
+  return {
+    isYearly,
+    selectedYear,
+    start,
+    end,
+    days,
+  };
+};
+
 const formatDuration = (seconds) => {
   if (seconds === undefined || seconds === null) return null;
   const n = Number(seconds);
@@ -196,107 +244,241 @@ export const getAdminDashboardOverview = async (req, res) => {
 //   }
 // };
 
-export const getSubscriptionGrowthAndTotalRevenue = async (req, res) => {
+export const getRevenueAnalytics = async (req, res) => {
   try {
-    const { period } = req.query; // '7d' | '30d' | '90d'
-    const now = new Date();
-    const end = startOfUtcDay(now);
-
-    let days = 7;
-    if (String(period) === "30d") days = 30;
-    if (String(period) === "90d") days = 90;
-    const start = addUtcDays(end, -days);
-
-    const [viewerNewSubscriptions, creatorNewSubscriptions, revenueAgg] =
-      await Promise.all([
-        prisma.subscription.count({
-          where: { created_at: { gte: start, lt: end } },
-        }),
-        prisma.creatorSubscription.count({
-          where: { deleted_at: null, created_at: { gte: start, lt: end } },
-        }),
-        prisma.paymentTransaction.aggregate({
-          _sum: { paid_amount: true, price: true },
-          where: {
-            deleted_at: null,
-            status: "succeeded",
-            created_at: { gte: start, lt: end },
-          },
-        }),
-      ]);
-
-    // Build last-7-days series for the chart in the screenshot
-    const seriesDays = 7;
-    const seriesStart = addUtcDays(end, -seriesDays);
-    const points = await Promise.all(
-      Array.from({ length: seriesDays }).map(async (_, idx) => {
-        const d0 = addUtcDays(seriesStart, idx);
-        const d1 = addUtcDays(seriesStart, idx + 1);
-
-        const [
-          viewerCreated,
-          creatorCreated,
-          viewerCanceled,
-          creatorCanceled,
-        ] = await Promise.all([
-          prisma.subscription.count({
-            where: { created_at: { gte: d0, lt: d1 } },
-          }),
-          prisma.creatorSubscription.count({
-            where: { deleted_at: null, created_at: { gte: d0, lt: d1 } },
-          }),
-          prisma.subscription.count({
-            where: {
-              OR: [
-                { end_date: { gte: d0, lt: d1 } },
-                { status: "expired", updated_at: { gte: d0, lt: d1 } },
-              ],
-            },
-          }),
-          prisma.creatorSubscription.count({
-            where: {
-              deleted_at: null,
-              OR: [
-                { end_date: { gte: d0, lt: d1 } },
-                { status: "expired", updated_at: { gte: d0, lt: d1 } },
-              ],
-            },
-          }),
-        ]);
-
-        return {
-          date: d0,
-          new_subscribers: viewerCreated + creatorCreated,
-          cancellations: viewerCanceled + creatorCanceled,
-          breakdown: {
-            viewer: {
-              new_subscribers: viewerCreated,
-              cancellations: viewerCanceled,
-            },
-            creator: {
-              new_subscribers: creatorCreated,
-              cancellations: creatorCanceled,
-            },
-          },
-        };
-      }),
+    const { period, year } = req.query;
+    const { isYearly, selectedYear, start, end, days } = resolveDashboardPeriod(
+      period,
+      year,
     );
+
+    const revenueAgg = await prisma.paymentTransaction.aggregate({
+      _sum: { paid_amount: true, price: true },
+      where: {
+        deleted_at: null,
+        status: "succeeded",
+        created_at: { gte: start, lt: end },
+      },
+    });
+
+    const points = isYearly
+      ? await Promise.all(
+          MONTH_LABELS.map(async (monthLabel, idx) => {
+            const d0 = new Date(Date.UTC(selectedYear, idx, 1));
+            const d1 = new Date(Date.UTC(selectedYear, idx + 1, 1));
+            const revenueMonthAgg = await prisma.paymentTransaction.aggregate({
+              _sum: { paid_amount: true, price: true },
+              where: {
+                deleted_at: null,
+                status: "succeeded",
+                created_at: { gte: d0, lt: d1 },
+              },
+            });
+
+            return {
+              label: monthLabel,
+              month: idx + 1,
+              period_start: d0,
+              period_end: d1,
+              revenue: sumMoney(revenueMonthAgg),
+            };
+          }),
+        )
+      : await Promise.all(
+          Array.from({ length: days }).map(async (_, idx) => {
+            const d0 = addUtcDays(start, idx);
+            const d1 = addUtcDays(start, idx + 1);
+            const revenueDayAgg = await prisma.paymentTransaction.aggregate({
+              _sum: { paid_amount: true, price: true },
+              where: {
+                deleted_at: null,
+                status: "succeeded",
+                created_at: { gte: d0, lt: d1 },
+              },
+            });
+
+            return {
+              date: d0,
+              revenue: sumMoney(revenueDayAgg),
+            };
+          }),
+        );
 
     res.json({
       success: true,
-      period: { start, end, days },
+      period: {
+        type: isYearly ? "yearly" : "rolling_days",
+        year: isYearly ? selectedYear : null,
+        start,
+        end,
+        days,
+      },
+      totals: {
+        revenue: sumMoney(revenueAgg),
+      },
+      graph_data: {
+        granularity: isYearly ? "month" : "day",
+        points,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching revenue analytics:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export const getSubscriptionGrowthAnalytics = async (req, res) => {
+  try {
+    const { period, year } = req.query;
+    const { isYearly, selectedYear, start, end, days } = resolveDashboardPeriod(
+      period || "7d",
+      year,
+    );
+
+    const [viewerNewSubscriptions, creatorNewSubscriptions] = await Promise.all([
+      prisma.subscription.count({
+        where: { created_at: { gte: start, lt: end } },
+      }),
+      prisma.creatorSubscription.count({
+        where: { deleted_at: null, created_at: { gte: start, lt: end } },
+      }),
+    ]);
+
+    const points = isYearly
+      ? await Promise.all(
+          MONTH_LABELS.map(async (monthLabel, idx) => {
+            const d0 = new Date(Date.UTC(selectedYear, idx, 1));
+            const d1 = new Date(Date.UTC(selectedYear, idx + 1, 1));
+
+            const [
+              viewerCreated,
+              creatorCreated,
+              viewerCanceled,
+              creatorCanceled,
+            ] = await Promise.all([
+              prisma.subscription.count({
+                where: { created_at: { gte: d0, lt: d1 } },
+              }),
+              prisma.creatorSubscription.count({
+                where: { deleted_at: null, created_at: { gte: d0, lt: d1 } },
+              }),
+              prisma.subscription.count({
+                where: {
+                  OR: [
+                    { end_date: { gte: d0, lt: d1 } },
+                    { status: "expired", updated_at: { gte: d0, lt: d1 } },
+                  ],
+                },
+              }),
+              prisma.creatorSubscription.count({
+                where: {
+                  deleted_at: null,
+                  OR: [
+                    { end_date: { gte: d0, lt: d1 } },
+                    { status: "expired", updated_at: { gte: d0, lt: d1 } },
+                  ],
+                },
+              }),
+            ]);
+
+            return {
+              label: monthLabel,
+              month: idx + 1,
+              period_start: d0,
+              period_end: d1,
+              new_subscribers: viewerCreated + creatorCreated,
+              cancellations: viewerCanceled + creatorCanceled,
+              breakdown: {
+                viewer: {
+                  new_subscribers: viewerCreated,
+                  cancellations: viewerCanceled,
+                },
+                creator: {
+                  new_subscribers: creatorCreated,
+                  cancellations: creatorCanceled,
+                },
+              },
+            };
+          }),
+        )
+      : await Promise.all(
+          Array.from({ length: days }).map(async (_, idx) => {
+            const d0 = addUtcDays(start, idx);
+            const d1 = addUtcDays(start, idx + 1);
+
+            const [
+              viewerCreated,
+              creatorCreated,
+              viewerCanceled,
+              creatorCanceled,
+            ] = await Promise.all([
+              prisma.subscription.count({
+                where: { created_at: { gte: d0, lt: d1 } },
+              }),
+              prisma.creatorSubscription.count({
+                where: { deleted_at: null, created_at: { gte: d0, lt: d1 } },
+              }),
+              prisma.subscription.count({
+                where: {
+                  OR: [
+                    { end_date: { gte: d0, lt: d1 } },
+                    { status: "expired", updated_at: { gte: d0, lt: d1 } },
+                  ],
+                },
+              }),
+              prisma.creatorSubscription.count({
+                where: {
+                  deleted_at: null,
+                  OR: [
+                    { end_date: { gte: d0, lt: d1 } },
+                    { status: "expired", updated_at: { gte: d0, lt: d1 } },
+                  ],
+                },
+              }),
+            ]);
+
+            return {
+              date: d0,
+              new_subscribers: viewerCreated + creatorCreated,
+              cancellations: viewerCanceled + creatorCanceled,
+              breakdown: {
+                viewer: {
+                  new_subscribers: viewerCreated,
+                  cancellations: viewerCanceled,
+                },
+                creator: {
+                  new_subscribers: creatorCreated,
+                  cancellations: creatorCanceled,
+                },
+              },
+            };
+          }),
+        );
+
+    res.json({
+      success: true,
+      period: {
+        type: isYearly ? "yearly" : "rolling_days",
+        year: isYearly ? selectedYear : null,
+        start,
+        end,
+        days,
+      },
       totals: {
         new_subscriptions: viewerNewSubscriptions + creatorNewSubscriptions,
         breakdown: {
           viewer: { new_subscriptions: viewerNewSubscriptions },
           creator: { new_subscriptions: creatorNewSubscriptions },
         },
-        revenue: sumMoney(revenueAgg),
       },
-      subscription_growth_last_week: points,
+      graph_data: {
+        granularity: isYearly ? "month" : "day",
+        points,
+      },
+      subscription_growth_last_week: !isYearly && days === 7 ? points : [],
     });
   } catch (error) {
-    console.error("Error fetching subscription growth and total revenue:", error);
+    console.error("Error fetching subscription growth analytics:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 };

@@ -2,7 +2,8 @@ import express from "express";
 import { verifyUser } from "../../../middlewares/verifyUsers.js";
 import {
   getAdminDashboardOverview,
-  getSubscriptionGrowthAndTotalRevenue,
+  getRevenueAnalytics,
+  getSubscriptionGrowthAnalytics,
 } from "./dashboard.controller.js";
 import { getAllUsers } from "../users/users.controller.js";
 const router = express.Router();
@@ -17,8 +18,10 @@ router.get(
 router.get(
   "/dashboard/subscription-growth",
   verifyUser("admin"),
-  getSubscriptionGrowthAndTotalRevenue,
+  getSubscriptionGrowthAnalytics,
 );
+
+router.get("/dashboard/revenue", verifyUser("admin"), getRevenueAnalytics);
 router.get("/dashboard/recent-users", verifyUser("admin"), getAllUsers);
 
 export default router;
