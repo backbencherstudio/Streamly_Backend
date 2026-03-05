@@ -1908,9 +1908,15 @@ async function cancelCreatorStripeSubscriptionInternal(req, res) {
 async function getCreatorSubscriptionStatusInternal(req, res) {
   try {
     const { userId } = req.user;
-    const sub = await prisma.creatorSubscription.findFirst({
-      where: { user_id: userId, status: "active" },
-    });
+    const [sub, userRow] = await Promise.all([
+      prisma.creatorSubscription.findFirst({
+        where: { user_id: userId, status: "active" },
+      }),
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: { email: true },
+      }),
+    ]);
     if (!sub) {
       return res.status(200).json({ isCreatorSubscribed: false });
     }
@@ -1923,7 +1929,10 @@ async function getCreatorSubscriptionStatusInternal(req, res) {
 
     return res
       .status(200)
-      .json({ isCreatorSubscribed: true, subscription: { ...sub, service } });
+      .json({
+        isCreatorSubscribed: true,
+        subscription: { ...sub, email: userRow?.email ?? null, service },
+      });
   } catch (err) {
     console.error("getCreatorSubscriptionStatus error:", err);
     return res.status(400).json({ error: err.message });
@@ -2136,7 +2145,8 @@ export const getSubscriptionStatus = async (req, res) => {
   // Default: return both
   try {
     const { userId } = req.user;
-    const [viewer, creatorSub, lastViewerDeactivated] = await Promise.all([
+    const [viewer, creatorSub, lastViewerDeactivated, userRow] =
+      await Promise.all([
       prisma.subscription.findFirst({
         where: { user_id: userId, status: "active" },
       }),
@@ -2148,6 +2158,10 @@ export const getSubscriptionStatus = async (req, res) => {
         orderBy: { created_at: "desc" },
         select: { end_date: true },
       }),
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: { email: true },
+      }),
     ]);
 
     const creatorService = creatorSub?.creator_service_id
@@ -2157,7 +2171,7 @@ export const getSubscriptionStatus = async (req, res) => {
       : null;
 
     const creator = creatorSub
-      ? { ...creatorSub, service: creatorService }
+      ? { ...creatorSub, email: userRow?.email ?? null, service: creatorService }
       : null;
 
     const viewerCanceledByUpgrade =
