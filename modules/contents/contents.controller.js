@@ -11,7 +11,7 @@ const S3_BUCKET = process.env.AWS_S3_BUCKET;
 
 const serialize = (data) =>
   JSON.parse(
-    JSON.stringify(data, (_, v) => (typeof v === "bigint" ? v.toString() : v))
+    JSON.stringify(data, (_, v) => (typeof v === "bigint" ? v.toString() : v)),
   );
 
 const buildS3Url = (bucket, key) => {
@@ -40,11 +40,19 @@ const toListCard = (content) => {
     duration_seconds: content.duration_seconds,
     created_at: content.created_at,
     content_status: content.content_status,
-    category: content.category ? { id: content.category.id, name: content.category.name, slug: content.category.slug } : null,
+    category: content.category
+      ? {
+          id: content.category.id,
+          name: content.category.name,
+          slug: content.category.slug,
+        }
+      : null,
   };
   return {
     ...serialize(base),
-    thumbnail: buildS3Url(content.s3_bucket, content.s3_thumb_key) || buildLocalUrl(content.thumbnail),
+    thumbnail:
+      buildS3Url(content.s3_bucket, content.s3_thumb_key) ||
+      buildLocalUrl(content.thumbnail),
     s3_bucket: content.s3_bucket,
     s3_key: content.s3_key,
     s3_thumb_key: content.s3_thumb_key,
@@ -56,16 +64,18 @@ const toListCard = (content) => {
 const toWatchCard = (content) => {
   return {
     ...toListCard(content),
-    video: buildS3Url(content.s3_bucket, content.s3_key) || buildLocalUrl(content.video),
+    video:
+      buildS3Url(content.s3_bucket, content.s3_key) ||
+      buildLocalUrl(content.video),
   };
 };
 
 // Helpers to fetch related content
 const fetchRelatedByCategory = async (categoryId, excludeId, take = 12) => {
   const rows = await prisma.content.findMany({
-    where: { 
-      category_id: categoryId, 
-      content_status: "published", 
+    where: {
+      category_id: categoryId,
+      content_status: "published",
       review_status: "approved",
       deleted_at: null,
       id: { not: excludeId },
@@ -80,8 +90,8 @@ const fetchRelatedByCategory = async (categoryId, excludeId, take = 12) => {
 
 const fetchRelatedByGenre = async (genres, excludeId, take = 12) => {
   const rows = await prisma.content.findMany({
-    where: { 
-      content_status: "published", 
+    where: {
+      content_status: "published",
       review_status: "approved",
       deleted_at: null,
       id: { not: excludeId },
@@ -120,7 +130,7 @@ export const getHomeSections = async (req, res) => {
     const take = Number(req.query.take ?? 8);
     const page = Number(req.query.page ?? 1);
     const limit = 5; // number of categories to show as sections
-    
+
     if (Number.isNaN(take) || take < 1 || take > 50) {
       return res.status(400).json({ message: "take must be 1-50" });
     }
@@ -200,7 +210,8 @@ export const getHomeSections = async (req, res) => {
           continue;
         }
 
-        const sectionKey = category.slug || category.name || `category-${category.id}`;
+        const sectionKey =
+          category.slug || category.name || `category-${category.id}`;
         sections[sectionKey] = {
           items: contents.map(toListCard),
           page,
@@ -240,8 +251,14 @@ export const getRecommendedForUser = async (req, res) => {
 
     // Derive top genres from user's favourites and ratings
     const [favs, ratings] = await Promise.all([
-      prisma.favourite.findMany({ where: { user_id: userId }, include: { content: true } }),
-      prisma.rating.findMany({ where: { user_id: userId }, include: { content: true } }),
+      prisma.favourite.findMany({
+        where: { user_id: userId },
+        include: { content: true },
+      }),
+      prisma.rating.findMany({
+        where: { user_id: userId },
+        include: { content: true },
+      }),
     ]);
 
     const genreCount = new Map();
@@ -264,7 +281,7 @@ export const getRecommendedForUser = async (req, res) => {
     const [contents, total] = await Promise.all([
       topGenres.length
         ? prisma.content.findMany({
-            where: { 
+            where: {
               genre: { hasSome: topGenres },
               content_status: "published",
               review_status: "approved",
@@ -275,42 +292,42 @@ export const getRecommendedForUser = async (req, res) => {
             take,
             include: { category: true },
           })
-        : prisma.content.findMany({ 
-            where: { 
+        : prisma.content.findMany({
+            where: {
               content_status: "published",
               review_status: "approved",
               deleted_at: null,
             },
-            orderBy: { created_at: "desc" }, 
+            orderBy: { created_at: "desc" },
             skip: (page - 1) * take,
             take,
-            include: { category: true } 
+            include: { category: true },
           }),
       topGenres.length
         ? prisma.content.count({
-            where: { 
+            where: {
               genre: { hasSome: topGenres },
               content_status: "published",
               review_status: "approved",
               deleted_at: null,
-            }
+            },
           })
         : prisma.content.count({
-            where: { 
+            where: {
               content_status: "published",
               review_status: "approved",
               deleted_at: null,
-            }
-          })
+            },
+          }),
     ]);
 
-    return res.json({ 
-      recommended: contents.map(toListCard), 
+    return res.json({
+      recommended: contents.map(toListCard),
       basis: topGenres,
       page,
       take,
       total,
-      totalPages: Math.ceil(total / take)
+      totalPages: Math.ceil(total / take),
     });
   } catch (e) {
     console.error("getRecommendedForUser error", e);
@@ -336,7 +353,7 @@ export const getByGenre = async (req, res) => {
 
     const [contents, total] = await Promise.all([
       prisma.content.findMany({
-        where: { 
+        where: {
           genre: { has: genre.toLowerCase() },
           content_status: "published",
           review_status: "approved",
@@ -347,22 +364,22 @@ export const getByGenre = async (req, res) => {
         take,
         include: { category: true },
       }),
-      prisma.content.count({ 
-        where: { 
+      prisma.content.count({
+        where: {
           genre: { has: genre.toLowerCase() },
           content_status: "published",
           review_status: "approved",
           deleted_at: null,
-        } 
+        },
       }),
     ]);
 
-    return res.json({ 
-      items: contents.map(toListCard), 
-      page, 
+    return res.json({
+      items: contents.map(toListCard),
+      page,
       take,
       total,
-      totalPages: Math.ceil(total / take)
+      totalPages: Math.ceil(total / take),
     });
   } catch (e) {
     console.error("getByGenre error", e);
@@ -399,19 +416,16 @@ export const getContentDetails = async (req, res) => {
         ? row.Rating.reduce((sum, r) => sum + (r.rating || 0), 0) / ratingCount
         : 0;
 
-    const {
-      s3_bucket,
-      s3_key,
-      s3_thumb_key,
-      video,
-      thumbnail,
-      ...rest
-    } = row;
+    const { s3_bucket, s3_key, s3_thumb_key, video, thumbnail, ...rest } = row;
 
     const [relatedByCategory, relatedByGenre, trailers] = await Promise.all([
       fetchRelatedByCategory(rest.category?.id, id, 12),
-      rest.genre && rest.genre.length > 0 ? fetchRelatedByGenre(rest.genre, id, 12) : Promise.resolve([]),
-      rest.category?.id ? fetchTrailersInCategory(rest.category.id, 6) : Promise.resolve([]),
+      rest.genre && rest.genre.length > 0
+        ? fetchRelatedByGenre(rest.genre, id, 12)
+        : Promise.resolve([]),
+      rest.category?.id
+        ? fetchTrailersInCategory(rest.category.id, 6)
+        : Promise.resolve([]),
     ]);
 
     return res.json({
@@ -421,7 +435,8 @@ export const getContentDetails = async (req, res) => {
         count: ratingCount,
       },
       video: buildS3Url(s3_bucket, s3_key) || buildLocalUrl(video),
-      thumbnail: buildS3Url(s3_bucket, s3_thumb_key) || buildLocalUrl(thumbnail),
+      thumbnail:
+        buildS3Url(s3_bucket, s3_thumb_key) || buildLocalUrl(thumbnail),
       related: {
         byCategory: relatedByCategory,
         byGenre: relatedByGenre,
@@ -447,7 +462,7 @@ export const getContentToWatch = async (req, res) => {
       where: { id },
       include: { category: true },
     });
-    
+
     if (!row || row.content_status !== "published" || row.deleted_at) {
       return res.status(404).json({ message: "Content not found" });
     }
@@ -468,8 +483,13 @@ export const getContentToWatch = async (req, res) => {
 
     if (!recentView) {
       await prisma.$transaction([
-        prisma.contentView.create({ data: { user_id: userId, content_id: id } }),
-        prisma.content.update({ where: { id }, data: { view_count: { increment: 1 } } }),
+        prisma.contentView.create({
+          data: { user_id: userId, content_id: id },
+        }),
+        prisma.content.update({
+          where: { id },
+          data: { view_count: { increment: 1 } },
+        }),
       ]);
     }
 
@@ -477,8 +497,8 @@ export const getContentToWatch = async (req, res) => {
     // If multiple items exist in same category, treat as episodes; else show similar by genre/category
     const [sameCategory] = await Promise.all([
       prisma.content.findMany({
-        where: { 
-          category_id: row.category_id, 
+        where: {
+          category_id: row.category_id,
           content_status: "published",
           review_status: "approved",
           deleted_at: null,
@@ -488,20 +508,20 @@ export const getContentToWatch = async (req, res) => {
       }),
     ]);
 
-    const episodes = sameCategory
-      .filter(c => c.id !== id)
-      .map(toListCard);
+    const episodes = sameCategory.filter((c) => c.id !== id).map(toListCard);
 
     let similar = [];
     if (episodes.length === 0) {
       // fall back to similar content by genre/category
       const [byCat, byGenre] = await Promise.all([
         fetchRelatedByCategory(row.category_id, id, 12),
-        row.genre && row.genre.length > 0 ? fetchRelatedByGenre(row.genre, id, 12) : Promise.resolve([]),
+        row.genre && row.genre.length > 0
+          ? fetchRelatedByGenre(row.genre, id, 12)
+          : Promise.resolve([]),
       ]);
       // merge unique items
       const seen = new Set();
-      similar = [...byCat, ...byGenre].filter(card => {
+      similar = [...byCat, ...byGenre].filter((card) => {
         if (seen.has(card.id)) return false;
         seen.add(card.id);
         return true;
@@ -527,32 +547,41 @@ export const getDownloadLink = async (req, res) => {
     if (!id) return res.status(400).json({ message: "id is required" });
 
     if (!req.subscription) {
-      return res.status(403).json({ message: "Subscription required to download" });
+      return res
+        .status(403)
+        .json({ message: "Subscription required to download" });
     }
 
-    const row = await prisma.content.findUnique({ 
-      where: { id }, 
-      select: { 
+    const row = await prisma.content.findUnique({
+      where: { id },
+      select: {
         content_status: true,
         review_status: true,
         deleted_at: true,
-        s3_bucket: true, 
-        s3_key: true, 
+        s3_bucket: true,
+        s3_key: true,
         video: true,
         is_premium: true,
-      } 
+      },
     });
-    
+
     if (!row) return res.status(404).json({ message: "Content not found" });
-    
-    if (row.deleted_at || row.content_status !== "published" || row.review_status !== "approved") {
+
+    if (
+      row.deleted_at ||
+      row.content_status !== "published" ||
+      row.review_status !== "approved"
+    ) {
       return res.status(404).json({ message: "Content not found" });
     }
 
     // Prefer S3 signed link; fallback to local static URL
     if (row.s3_bucket && row.s3_key && S3_BUCKET) {
       try {
-        const cmd = new GetObjectCommand({ Bucket: row.s3_bucket, Key: row.s3_key });
+        const cmd = new GetObjectCommand({
+          Bucket: row.s3_bucket,
+          Key: row.s3_key,
+        });
         const url = await getSignedUrl(s3, cmd, { expiresIn: 60 * 10 }); // 10 minutes
         return res.json({ url, expiresIn: 600 });
       } catch (err) {
@@ -564,7 +593,8 @@ export const getDownloadLink = async (req, res) => {
     }
 
     const localUrl = buildLocalUrl(row.video);
-    if (!localUrl) return res.status(404).json({ message: "Download unavailable" });
+    if (!localUrl)
+      return res.status(404).json({ message: "Download unavailable" });
     return res.json({ url: localUrl, expiresIn: 0 });
   } catch (e) {
     console.error("getDownloadLink error", e);
@@ -619,7 +649,7 @@ export const getPopularCategories = async (req, res) => {
             },
           },
         },
-      })
+      }),
     ]);
 
     const popularCategories = await Promise.all(
@@ -640,7 +670,7 @@ export const getPopularCategories = async (req, res) => {
 
         const totalViews = contentInCategory.reduce(
           (sum, c) => sum + (c.view_count || 0),
-          0
+          0,
         );
 
         const avgRating =
@@ -649,8 +679,10 @@ export const getPopularCategories = async (req, res) => {
                 const contentRatings = c.Rating || [];
                 const contentAvgRating =
                   contentRatings.length > 0
-                    ? contentRatings.reduce((rSum, r) => rSum + (r.rating || 0), 0) /
-                      contentRatings.length
+                    ? contentRatings.reduce(
+                        (rSum, r) => rSum + (r.rating || 0),
+                        0,
+                      ) / contentRatings.length
                     : 0;
                 return sum + contentAvgRating;
               }, 0) / contentInCategory.length
@@ -660,7 +692,7 @@ export const getPopularCategories = async (req, res) => {
         const recentContent = contentInCategory.filter(
           (c) =>
             new Date(c.created_at) >
-            new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+            new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
         ).length;
 
         const popularityScore =
@@ -684,11 +716,11 @@ export const getPopularCategories = async (req, res) => {
           created_at: category.created_at,
           updated_at: category.updated_at,
         };
-      })
+      }),
     );
 
     popularCategories.sort(
-      (a, b) => b.metrics.popularity_score - a.metrics.popularity_score
+      (a, b) => b.metrics.popularity_score - a.metrics.popularity_score,
     );
 
     return res.status(200).json({
@@ -707,7 +739,6 @@ export const getPopularCategories = async (req, res) => {
       .json({ message: "Internal Server Error", error: error.message });
   }
 };
-
 
 // GET /api/contents/user/new-and-popular
 // Returns newest content + most popular/highly-rated content with pagination
@@ -742,8 +773,8 @@ export const getNewAndPopular = async (req, res) => {
           review_status: "approved",
           deleted_at: null,
           content_type: { in: ["movie", "series", "episode"] },
-        }
-      })
+        },
+      }),
     ]);
 
     // Get most popular by rating with pagination
@@ -773,7 +804,7 @@ export const getNewAndPopular = async (req, res) => {
             deleted_at: null,
           },
         },
-      })
+      }),
     ]);
 
     const popularIds = ratings.map((r) => r.content_id);
@@ -793,15 +824,15 @@ export const getNewAndPopular = async (req, res) => {
         page,
         take,
         total: newestTotal,
-        totalPages: Math.ceil(newestTotal / take)
+        totalPages: Math.ceil(newestTotal / take),
       },
       popular: {
         items: popular.map(toListCard),
         page,
         take,
         total: ratingsTotal.length,
-        totalPages: Math.ceil(ratingsTotal.length / take)
-      }
+        totalPages: Math.ceil(ratingsTotal.length / take),
+      },
     });
   } catch (e) {
     console.error("getNewAndPopular error", e);
@@ -831,14 +862,14 @@ export const getUpcomingByCategory = async (req, res) => {
 
     // Validate content_type filter if provided
     if (contentType && !validContentTypes.includes(contentType)) {
-      return res.status(400).json({ 
-        message: `Invalid content_type. Valid options: ${validContentTypes.join(", ")}` 
+      return res.status(400).json({
+        message: `Invalid content_type. Valid options: ${validContentTypes.join(", ")}`,
       });
     }
 
     // Build content type filter
-    const contentTypeFilter = contentType 
-      ? contentType 
+    const contentTypeFilter = contentType
+      ? contentType
       : { in: validContentTypes };
 
     // Get categories with upcoming content
@@ -870,12 +901,13 @@ export const getUpcomingByCategory = async (req, res) => {
     });
 
     if (categoriesWithUpcoming.length === 0) {
-      return res.json({ 
-        upcoming: {}, 
-        page, 
-        take, 
+      return res.json({
+        upcoming: {},
+        page,
+        take,
         message: "No upcoming content found",
-        filter: contentType || "all types (movie, series, episode, music_video)"
+        filter:
+          contentType || "all types (movie, series, episode, music_video)",
       });
     }
 
@@ -911,12 +943,13 @@ export const getUpcomingByCategory = async (req, res) => {
               release_date: {
                 gte: now,
               },
-            }
-          })
+            },
+          }),
         ]);
 
         if (upcomingInCategory.length > 0) {
-          const sectionKey = category.slug || category.name || `category-${category.id}`;
+          const sectionKey =
+            category.slug || category.name || `category-${category.id}`;
           upcoming[sectionKey] = {
             items: upcomingInCategory.map((content) => ({
               ...toListCard(content),
@@ -931,16 +964,21 @@ export const getUpcomingByCategory = async (req, res) => {
           };
         }
       } catch (categoryError) {
-        console.error(`Error fetching upcoming content for category ${category.id}:`, categoryError);
+        console.error(
+          `Error fetching upcoming content for category ${category.id}:`,
+          categoryError,
+        );
         // Skip this category on error, continue with next
       }
     }
 
-    return res.json({ 
-      upcoming, 
-      page, 
+    return res.json({
+      upcoming,
+      page,
       take,
-      filter: contentType ? `Filtered by: ${contentType}` : "All types (movie, series, episode, music_video)"
+      filter: contentType
+        ? `Filtered by: ${contentType}`
+        : "All types (movie, series, episode, music_video)",
     });
   } catch (e) {
     console.error("getUpcomingByCategory error", e);
@@ -1009,8 +1047,8 @@ export const getTrendingContent = async (req, res) => {
               content_status: "published",
               review_status: "approved",
               deleted_at: null,
-            }
-          })
+            },
+          }),
         ]);
 
         const withTrendScore = contentInCategory.map((c) => {
@@ -1026,7 +1064,8 @@ export const getTrendingContent = async (req, res) => {
           };
         });
 
-        const sectionKey = category.slug || category.name || `category-${category.id}`;
+        const sectionKey =
+          category.slug || category.name || `category-${category.id}`;
         trends[sectionKey] = {
           items: withTrendScore.map((c) => {
             const { Rating, ...rest } = c;
@@ -1038,10 +1077,13 @@ export const getTrendingContent = async (req, res) => {
           page,
           take,
           total: totalCount,
-          totalPages: Math.ceil(totalCount / take)
+          totalPages: Math.ceil(totalCount / take),
         };
       } catch (err) {
-        console.error(`Error fetching trending for category ${category.id}:`, err);
+        console.error(
+          `Error fetching trending for category ${category.id}:`,
+          err,
+        );
       }
     }
 
@@ -1123,8 +1165,8 @@ export const searchContent = async (req, res) => {
     }
 
     // Fetch results with optional sorting
-    const orderBy = topRated 
-      ? { Rating: { _avg: "rating" } } 
+    const orderBy = topRated
+      ? { Rating: { _avg: "rating" } }
       : { created_at: "desc" };
 
     const [results, total] = await Promise.all([
@@ -1145,8 +1187,9 @@ export const searchContent = async (req, res) => {
     const resultsWithRating = results.map((content) => {
       const card = toListCard(content);
       if (topRated && content.Rating && content.Rating.length > 0) {
-        const avgRating = 
-          content.Rating.reduce((sum, r) => sum + r.rating, 0) / content.Rating.length;
+        const avgRating =
+          content.Rating.reduce((sum, r) => sum + r.rating, 0) /
+          content.Rating.length;
         return { ...card, avg_rating: parseFloat(avgRating.toFixed(2)) };
       }
       return card;
@@ -1199,7 +1242,10 @@ export const getSearchFilters = async (req, res) => {
     // Get all available genres from schema (dynamically)
     const genrePattern = /enum Genra\s*\{([^}]+)\}/;
     const fs = await import("fs");
-    const schemaPath = new URL("../../../prisma/schema.prisma", import.meta.url);
+    const schemaPath = new URL(
+      "../../../prisma/schema.prisma",
+      import.meta.url,
+    );
     const schemaContent = fs.readFileSync(schemaPath, "utf-8");
     const match = schemaContent.match(genrePattern);
     const availableGenres = match
@@ -1221,8 +1267,11 @@ export const getSearchFilters = async (req, res) => {
       distinct: ["release_date"],
     });
 
-    const years = [...new Set(yearsResult.map((c) => c.release_date?.getFullYear()).filter(Boolean))]
-      .sort((a, b) => b - a);
+    const years = [
+      ...new Set(
+        yearsResult.map((c) => c.release_date?.getFullYear()).filter(Boolean),
+      ),
+    ].sort((a, b) => b - a);
 
     return res.json({
       categories: categories.map((cat) => ({
@@ -1359,6 +1408,87 @@ export const getSearchSuggestions = async (req, res) => {
     });
   } catch (e) {
     console.error("getSearchSuggestions error", e);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+// GET /api/contents/user/content/:content_type
+// Get all content of a specific type (movie, series, episode, music_video) for search results page with pagination
+export const getContentByContentType = async (req, res) => {
+  try {
+    const { content_type } = req.params;
+    const q = String(req.query.q || "").trim();
+    const take = Number(req.query.take ?? 20);
+    const page = Number(req.query.page ?? 1);
+
+    const validTypes = ["movie", "series", "episode", "music_video"];
+    if (!validTypes.includes(content_type)) {
+      return res
+        .status(400)
+        .json({
+          message: `Invalid content_type. Valid options: ${validTypes.join(", ")}`,
+        });
+    }
+
+    if (Number.isNaN(take) || take < 1 || take > 100) {
+      return res.status(400).json({ message: "take must be 1-100" });
+    }
+
+    if (Number.isNaN(page) || page < 1) {
+      return res.status(400).json({ message: "page must be >= 1" });
+    }
+
+    const [contents, total] = await Promise.all([
+      prisma.content.findMany({
+        where: {
+          content_type,
+          content_status: "published",
+          review_status: "approved",
+          deleted_at: null,
+          ...(q
+            ? {
+                title: { contains: q, mode: "insensitive" },
+              }
+            : {}),
+        },
+        orderBy: { title: "asc" },
+        skip: (page - 1) * take,
+        take,
+        select: {
+          id: true,
+          title: true,
+        },
+      }),
+
+      prisma.content.count({
+        where: {
+          content_type,
+          content_status: "published",
+          review_status: "approved",
+          deleted_at: null,
+          ...(q
+            ? {
+                title: { contains: q, mode: "insensitive" },
+              }
+            : {}),
+        },
+      }),
+    ]);
+
+    return res.json({
+      content_type,
+      items: contents.map((content) => ({
+        id: content.id,
+        name: content.title,
+      })),
+      q: q || null,
+      page,
+      take,
+      total,
+      totalPages: Math.ceil(total / take),
+    });
+  } catch (e) {
+    console.error("getContentByContentType error", e);
     return res.status(500).json({ message: "Internal Server Error" });
   }
 };
