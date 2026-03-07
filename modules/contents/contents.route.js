@@ -16,6 +16,7 @@ import {
   getSearchFilters,
   browseCategory,
   getSearchSuggestions,
+  getContentByContentType,
 } from "./contents.controller.js";
 
 const router = express.Router();
@@ -75,5 +76,8 @@ router.get("/search/suggestions", getSearchSuggestions);
 // Browse all content in a category with optional content_type filter
 // /browse/category/action?content_type=movie&page=1&take=16
 router.get("/browse/category/:slug", browseCategory);
+
+// get all content by content_type (movie, series, episode, music_video) for search results page with suggestions
+router.get("/content/:content_type", getContentByContentType);
 
 export default router;
